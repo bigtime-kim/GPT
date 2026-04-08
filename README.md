@@ -5,7 +5,8 @@
 - AI 추론 + Excel DB 검색을 결합해
 - 보유한 `emission_factor.xlsx`에서 가장 적합한 배출계수 후보를 찾는 것
 
-기본 모드는 **AI-first**입니다. (기본적으로 Gemini 보조 추론 수행)
+기본 모드는 **AI-first**입니다.
+단, Gemini 키가 없으면 자동으로 로컬 AI 스텁으로 동작하며 멈추지 않습니다.
 
 ---
 
@@ -14,25 +15,45 @@
 python run_demo.py --name "VMQ"
 ```
 
-- 고정 파일명 `emission_factor.xlsx`를 자동 로딩
-- deterministic 후보를 만든 뒤 AI가 의미 해석/재랭킹
-- 엑셀이 없거나 로딩 실패해도 프로그램은 종료되지 않음
+- 고정 파일명 `emission_factor.xlsx` 자동 로딩
+- deterministic 후보 생성 + AI 재랭킹
+- 엑셀이 없거나 로딩 실패해도 종료되지 않음
+- Gemini 키가 없어도 키 입력 프롬프트 없이 계속 진행
 
 ---
 
-## Gemini 설정
-권장:
+## openpyxl 경고가 뜰 때 (당신 로그 케이스)
+현재 실행 Python에 openpyxl이 없는 상태입니다.
+아래 **그대로 복붙**:
+
+```powershell
+"C:\Users\shk23\AppData\Local\Programs\Python\Python312\python.exe" -m pip install openpyxl
+```
+
+또는 일반형:
+```powershell
+python -m pip install -r requirements.txt
+```
+
+설치 확인:
+```powershell
+python -c "import openpyxl; print(openpyxl.__version__)"
+```
+
+---
+
+## Gemini 설정 (선택)
 ```powershell
 $env:GEMINI_API_KEY="your_key"
 python run_demo.py --name "Thermiga 80127"
 ```
 
-진단:
+디버그:
 ```powershell
 python run_demo.py --diag --name "VMQ"
 ```
 
-디버그용으로만 AI 비활성화:
+AI 비활성화(디버그용):
 ```powershell
 python run_demo.py --no-ai --name "VMQ"
 ```
@@ -51,13 +72,6 @@ python run_demo.py --no-ai --name "VMQ"
 1. 현재 폴더
 2. 실행파일/스크립트 폴더
 3. 실행파일/스크립트 상위 폴더
-
----
-
-## 권장 설치
-```powershell
-python -m pip install -r requirements.txt
-```
 
 ---
 

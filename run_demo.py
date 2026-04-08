@@ -10,7 +10,6 @@ You can still pass arguments for automation:
 from __future__ import annotations
 
 import argparse
-import getpass
 import json
 import os
 import sys
@@ -205,6 +204,7 @@ def load_fixed_ef_knowledge(knowledge: dict) -> dict:
     except Exception as exc:  # keep demo alive in exe environments
         print(f"[WARN] EF 엑셀 로딩 실패: {exc}\n[HINT] .xlsx 로딩에는 openpyxl이 필요합니다. `pip install openpyxl`")
         print(f"[HINT] 현재 python: {sys.executable}")
+        print(f"[HINT] 이 Python에 설치: '{sys.executable}' -m pip install openpyxl")
         print("[HINT] exe 사용 중이면 PyInstaller 빌드 시 openpyxl 포함 필요: pyinstaller --onefile run_demo.py --collect-all openpyxl")
         print("[INFO] 기본 샘플 지식으로 계속 실행합니다.")
 
@@ -228,10 +228,8 @@ def resolve_ai_mode(interactive: bool, disable_ai_arg: bool, key_arg: str | None
     if disable_ai_arg:
         return False, ""
 
+    # No blocking prompt: if key is missing, run with local AI stub.
     key = key_arg or os.getenv("GEMINI_API_KEY", "") or DEMO_GEMINI_API_KEY
-    if interactive and not key:
-        key = getpass.getpass("GEMINI_API_KEY 입력(없으면 엔터): ").strip()
-
     return True, key
 
 

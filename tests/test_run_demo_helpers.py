@@ -50,12 +50,12 @@ class RunDemoHelperTest(unittest.TestCase):
                 load_fixed_ef_knowledge({"db_catalog": {}})
 
     def test_resolve_ai_mode_requires_key(self):
-        with patch("getpass.getpass", return_value=""):
+        with patch("builtins.input", return_value=""):
             with self.assertRaises(ValueError):
                 resolve_ai_mode(interactive=True, disable_ai_arg=False, key_arg=None)
 
     def test_resolve_ai_mode_accepts_prompt_key(self):
-        with patch("getpass.getpass", return_value="abc123"):
+        with patch("builtins.input", return_value="abc123"):
             use_ai, key = resolve_ai_mode(interactive=True, disable_ai_arg=False, key_arg=None)
             self.assertTrue(use_ai)
             self.assertEqual(key, "abc123")

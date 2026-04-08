@@ -10,7 +10,6 @@ You can still pass arguments for automation:
 from __future__ import annotations
 
 import argparse
-import getpass
 import json
 import os
 import sys
@@ -231,7 +230,7 @@ def resolve_ai_mode(interactive: bool, disable_ai_arg: bool, key_arg: str | None
 
     key = key_arg or os.getenv("GEMINI_API_KEY", "") or DEMO_GEMINI_API_KEY
     if interactive and not key:
-        key = getpass.getpass("GEMINI_API_KEY 입력(필수): ").strip()
+        key = input("GEMINI_API_KEY 입력(필수, 입력값 표시됨): ").strip()
     if not key:
         raise ValueError("GEMINI_API_KEY is required. Set env var or pass --gemini-api-key. (Use --no-ai only for debug)")
     return True, key

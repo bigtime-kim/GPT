@@ -27,6 +27,7 @@ python -m pip install -r requirements.txt
 $env:GEMINI_API_KEY="your_key"
 ```
 환경변수를 못 쓰면 실행 중 프롬프트에서 키 입력 가능.
+현재 프롬프트는 입력값이 **보이도록** 되어 있습니다.
 
 ---
 

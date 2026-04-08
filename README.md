@@ -26,6 +26,7 @@ CSV를 쓰면 `openpyxl` 의존 없이 바로 읽습니다.
 python -m pip install -r requirements.txt
 $env:GEMINI_API_KEY="your_key"
 ```
+환경변수를 못 쓰면 실행 중 프롬프트에서 키 입력 가능.
 
 ---
 

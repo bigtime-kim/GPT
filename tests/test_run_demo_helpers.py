@@ -4,7 +4,13 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from run_demo import _extract_json_object, load_fixed_ef_knowledge, locate_ef_file, resolve_ai_mode
+from run_demo import (
+    _extract_json_object,
+    get_ef_search_paths,
+    load_fixed_ef_knowledge,
+    locate_ef_file,
+    resolve_ai_mode,
+)
 
 
 class RunDemoHelperTest(unittest.TestCase):
@@ -15,6 +21,11 @@ class RunDemoHelperTest(unittest.TestCase):
     def test_extract_json_object_markdown_block(self):
         parsed = _extract_json_object('```json\n{"review_required":true}\n```')
         self.assertTrue(parsed["review_required"])
+
+    def test_get_ef_search_paths(self):
+        paths = get_ef_search_paths()
+        self.assertGreaterEqual(len(paths), 3)
+        self.assertTrue(all(p.name == "emission_factor.xlsx" for p in paths))
 
     def test_locate_ef_file_finds_in_cwd(self):
         with tempfile.TemporaryDirectory() as tmp:

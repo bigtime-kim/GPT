@@ -151,29 +151,50 @@ def _get_base_dir() -> Path:
     return Path(__file__).resolve().parent
 
 
-def locate_ef_file() -> Path | None:
-    """Find `emission_factor.xlsx` in common runtime locations."""
-    candidates = [
+def get_ef_search_paths() -> list[Path]:
+    return [
         Path.cwd() / DEFAULT_EF_FILENAME,
         _get_base_dir() / DEFAULT_EF_FILENAME,
         _get_base_dir().parent / DEFAULT_EF_FILENAME,
     ]
 
-    for path in candidates:
+
+def locate_ef_file() -> Path | None:
+    for path in get_ef_search_paths():
         if path.exists():
             return path
-
     return None
+
+
+def _list_excel_hints() -> list[str]:
+    """Collect nearby excel files for troubleshooting when fixed filename isn't found."""
+    hints: list[str] = []
+    seen = set()
+    for candidate in get_ef_search_paths():
+        folder = candidate.parent
+        if folder in seen or not folder.exists():
+            continue
+        seen.add(folder)
+        for p in folder.glob("*.xls*"):
+            hints.append(str(p.resolve()))
+    return hints[:10]
 
 
 def load_fixed_ef_knowledge(knowledge: dict) -> dict:
     """Try loading fixed-name EF file. Never raise; returns updated knowledge."""
     ef_path = locate_ef_file()
     if not ef_path:
-        print(
-            f"[WARN] {DEFAULT_EF_FILENAME} 파일을 찾지 못했습니다. "
-            "검색 위치: 현재 폴더, 실행파일 폴더, 실행파일 상위 폴더"
-        )
+        print(f"[WARN] {DEFAULT_EF_FILENAME} 파일을 찾지 못했습니다.")
+        print("[INFO] 검색 경로:")
+        for p in get_ef_search_paths():
+            print(f"  - {p}")
+
+        hints = _list_excel_hints()
+        if hints:
+            print("[INFO] 주변에서 발견된 Excel 파일:")
+            for h in hints:
+                print(f"  - {h}")
+
         print("[INFO] 기본 샘플 지식으로 실행합니다.")
         return knowledge
 

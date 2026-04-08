@@ -4,21 +4,25 @@
 - 엑셀 경로 입력 제거
 - 고정 파일명 `emission_factor.xlsx` 자동 로딩
 - 파일 인식/로딩 실패 시 즉시 종료하지 않고 경고 후 계속 실행
+- 못 찾으면 실제 검색한 절대경로와 주변 Excel 파일 목록을 출력
 
 ---
 
-## 실행파일이 바로 꺼지는 경우
-주요 원인:
-1) `emission_factor.xlsx`를 못 찾음
-2) 엑셀 로딩 의존성(`openpyxl`) 없음
-3) 엑셀 컬럼 불일치
+## 엑셀파일을 폴더에 넣었는데 왜 못 찾는가?
+대부분 아래 중 하나입니다.
+1) 파일명이 정확히 `emission_factor.xlsx`가 아님
+2) exe 실행 위치와 파일 위치가 다름
+3) 확장자가 숨김되어 `emission_factor.xlsx.xlsx` 상태
 
-현재는 위 문제가 있어도 프로그램이 바로 종료되지 않고,
-경고를 출력한 뒤 기본 샘플 지식으로 계속 실행됩니다.
+이제 프로그램이 못 찾으면 아래를 출력합니다.
+- 검색한 경로들
+- 주변에서 발견된 `*.xls*` 파일 목록
+
+이 출력으로 파일명을 바로 비교하면 원인을 찾을 수 있습니다.
 
 ---
 
-## 파일을 못 읽는 경우 먼저 확인
+## 파일 탐색 순서
 `emission_factor.xlsx`는 아래 순서로 탐색됩니다.
 1. 현재 실행 폴더
 2. 실행 파일(또는 스크립트) 폴더
@@ -27,26 +31,6 @@
 즉, exe를 `dist`에서 실행한다면
 - `dist/emission_factor.xlsx` 또는
 - 프로젝트 루트(`dist`의 상위 폴더)에 파일을 두면 인식됩니다.
-
----
-
-## 질문 3가지 답
-1. **엑셀파일은 같은 폴더에 넣으면 되나요?**  
-   → **네.** 같은 폴더면 인식됩니다. 안 되면 위 3개 탐색 위치를 확인하세요.
-2. **실행파일에서 API 키를 바로 입력할 수 있나요?**  
-   → **네.** AI 사용 시 `y` 선택하면 키 입력창이 뜹니다.
-3. **그다음 물질명을 넣으면 바로 실행되나요?**  
-   → **네.** 입력 즉시 매핑 결과가 출력됩니다.
-
----
-
-## 고정 Excel 파일명 규칙
-- 파일명: `emission_factor.xlsx`
-- 필수 컬럼:
-  - `Activity Name`
-  - `Geography`
-  - `Reference Product Name`
-  - `Reference Product Unit`
 
 ---
 
@@ -59,6 +43,16 @@ python run_demo.py
 ```bash
 python run_demo.py --name "VMQ" --geo KR --unit kg --use-ai
 ```
+
+---
+
+## 고정 Excel 파일명 규칙
+- 파일명: `emission_factor.xlsx`
+- 필수 컬럼:
+  - `Activity Name`
+  - `Geography`
+  - `Reference Product Name`
+  - `Reference Product Unit`
 
 ---
 
@@ -86,11 +80,6 @@ python run_demo.py --use-ai --name "Thermiga 80127"
 ```python
 DEMO_GEMINI_API_KEY = "여기에_키"
 ```
-
----
-
-## 구현 점검 문서
-- `IMPLEMENTATION_CHECKLIST.md` 참조
 
 ---
 

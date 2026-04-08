@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from run_demo import _extract_json_object, locate_ef_file, resolve_ai_mode
+from run_demo import _extract_json_object, load_fixed_ef_knowledge, locate_ef_file, resolve_ai_mode
 
 
 class RunDemoHelperTest(unittest.TestCase):
@@ -28,6 +28,14 @@ class RunDemoHelperTest(unittest.TestCase):
                 self.assertEqual(found.resolve(), ef.resolve())
             finally:
                 os.chdir(original)
+
+    def test_load_fixed_ef_knowledge_never_raises(self):
+        with patch("run_demo.locate_ef_file", return_value=Path("dummy.xlsx")), patch(
+            "run_demo.load_ef_excel", side_effect=RuntimeError("boom")
+        ):
+            knowledge = {"db_catalog": {}}
+            result = load_fixed_ef_knowledge(knowledge)
+            self.assertIn("db_catalog", result)
 
     def test_resolve_ai_mode_prompt_and_key_input(self):
         with patch("builtins.input", return_value="y"), patch("getpass.getpass", return_value="abc123"):

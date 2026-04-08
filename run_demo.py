@@ -14,6 +14,7 @@ import getpass
 import json
 import os
 import sys
+import traceback
 from pathlib import Path
 from pprint import pprint
 from urllib import error, request
@@ -151,14 +152,7 @@ def _get_base_dir() -> Path:
 
 
 def locate_ef_file() -> Path | None:
-    """Find `emission_factor.xlsx` in common runtime locations.
-
-    Search order:
-    1) current working directory
-    2) script/executable directory
-    3) parent directory of script/executable (useful for dist/ layout)
-    """
-
+    """Find `emission_factor.xlsx` in common runtime locations."""
     candidates = [
         Path.cwd() / DEFAULT_EF_FILENAME,
         _get_base_dir() / DEFAULT_EF_FILENAME,
@@ -170,6 +164,27 @@ def locate_ef_file() -> Path | None:
             return path
 
     return None
+
+
+def load_fixed_ef_knowledge(knowledge: dict) -> dict:
+    """Try loading fixed-name EF file. Never raise; returns updated knowledge."""
+    ef_path = locate_ef_file()
+    if not ef_path:
+        print(
+            f"[WARN] {DEFAULT_EF_FILENAME} 파일을 찾지 못했습니다. "
+            "검색 위치: 현재 폴더, 실행파일 폴더, 실행파일 상위 폴더"
+        )
+        print("[INFO] 기본 샘플 지식으로 실행합니다.")
+        return knowledge
+
+    try:
+        knowledge.update(load_ef_excel(str(ef_path)))
+        print(f"[INFO] EF 엑셀 로딩 완료(파일명={DEFAULT_EF_FILENAME}): {ef_path}")
+    except Exception as exc:  # keep demo alive in exe environments
+        print(f"[WARN] EF 엑셀 로딩 실패: {exc}")
+        print("[INFO] 기본 샘플 지식으로 계속 실행합니다.")
+
+    return knowledge
 
 
 def resolve_ai_mode(interactive: bool, use_ai_arg: bool, key_arg: str | None) -> tuple[bool, str]:
@@ -191,7 +206,7 @@ def resolve_ai_mode(interactive: bool, use_ai_arg: bool, key_arg: str | None) ->
     return True, key
 
 
-def main():
+def run() -> int:
     parser = argparse.ArgumentParser(description="Run a mapping demo with sample knowledge + fixed Excel file name")
     parser.add_argument("--name", help="Activity name to map (if omitted, interactive prompt is used)")
     parser.add_argument("--geo", default="", help="Geography hint (e.g., KR, US, GLO, RoW)")
@@ -204,16 +219,7 @@ def main():
     interactive = args.name is None
 
     knowledge = build_default_knowledge()
-    ef_path = locate_ef_file()
-    if ef_path:
-        knowledge.update(load_ef_excel(str(ef_path)))
-        print(f"[INFO] EF 엑셀 로딩 완료(파일명={DEFAULT_EF_FILENAME}): {ef_path}")
-    else:
-        print(
-            f"[WARN] {DEFAULT_EF_FILENAME} 파일을 찾지 못했습니다. "
-            "검색 위치: 현재 폴더, 실행파일 폴더, 실행파일 상위 폴더"
-        )
-        print("[INFO] 기본 샘플 지식으로 실행합니다.")
+    knowledge = load_fixed_ef_knowledge(knowledge)
 
     use_ai, gemini_key = resolve_ai_mode(interactive, args.use_ai, args.gemini_api_key)
     ai = gemini_assist_from_api_key(gemini_key, args.gemini_model) if use_ai else None
@@ -233,6 +239,22 @@ def main():
     if interactive:
         input("\n엔터를 누르면 종료됩니다.")
 
+    return 0
+
+
+def main() -> int:
+    try:
+        return run()
+    except KeyboardInterrupt:
+        print("\n[INFO] 사용자 중단")
+        return 130
+    except Exception:
+        print("\n[ERROR] 실행 중 예외가 발생했습니다:")
+        traceback.print_exc()
+        if sys.stdin and sys.stdin.isatty():
+            input("\n엔터를 누르면 종료됩니다.")
+        return 1
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

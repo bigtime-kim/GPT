@@ -4,10 +4,18 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from run_demo import resolve_ai_mode, resolve_excel_path
+from run_demo import _extract_json_object, resolve_ai_mode, resolve_excel_path
 
 
 class RunDemoHelperTest(unittest.TestCase):
+    def test_extract_json_object_plain(self):
+        parsed = _extract_json_object('{"confidence":0.9,"proxy_candidates":["a"]}')
+        self.assertEqual(parsed["confidence"], 0.9)
+
+    def test_extract_json_object_markdown_block(self):
+        parsed = _extract_json_object('```json\n{"review_required":true}\n```')
+        self.assertTrue(parsed["review_required"])
+
     def test_resolve_excel_path_uses_default_when_exists(self):
         with tempfile.TemporaryDirectory() as tmp:
             cwd = Path(tmp)

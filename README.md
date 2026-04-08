@@ -8,6 +8,42 @@
 
 ---
 
+## 지금 로그 기준 원인 (당신 케이스)
+로그에 아래 문구가 나왔습니다.
+- `openpyxl is required to read .xlsx files`
+
+즉 파일을 못 찾은 게 아니라, **xlsx 읽기 라이브러리가 없어서 로딩 실패**한 상태입니다.
+
+해결:
+```powershell
+python -m pip install -r requirements.txt
+# 또는
+python -m pip install openpyxl
+```
+
+설치 확인:
+```powershell
+python -c "import openpyxl; print(openpyxl.__version__)"
+```
+
+---
+
+## Windows PowerShell에서 명령 연결 주의
+PowerShell 5.x에서는 `&&`가 안 될 수 있습니다.
+아래처럼 줄바꿈으로 실행하세요.
+
+```powershell
+git add run_demo.py README.md tests/test_run_demo_helpers.py
+git commit -m "Add EF search-path diagnostics and nearby file hints"
+```
+
+또는 세미콜론 사용:
+```powershell
+git add run_demo.py README.md tests/test_run_demo_helpers.py; git commit -m "..."
+```
+
+---
+
 ## 엑셀파일을 폴더에 넣었는데 왜 못 찾는가?
 대부분 아래 중 하나입니다.
 1) 파일명이 정확히 `emission_factor.xlsx`가 아님
@@ -35,12 +71,12 @@
 ---
 
 ## 실행
-```bash
+```powershell
 python run_demo.py
 ```
 
 자동화 실행:
-```bash
+```powershell
 python run_demo.py --name "VMQ" --geo KR --unit kg --use-ai
 ```
 
@@ -69,12 +105,6 @@ $env:GEMINI_API_KEY="your_gemini_api_key"
 python run_demo.py --use-ai --name "Thermiga 80127"
 ```
 
-#### Linux/macOS
-```bash
-export GEMINI_API_KEY="your_gemini_api_key"
-python run_demo.py --use-ai --name "Thermiga 80127"
-```
-
 ### 방법 C) 코드에 직접 작성 (가능하지만 비권장)
 `run_demo.py` 상단:
 ```python
@@ -84,6 +114,6 @@ DEMO_GEMINI_API_KEY = "여기에_키"
 ---
 
 ## 테스트
-```bash
+```powershell
 python -m unittest discover -s tests -v
 ```

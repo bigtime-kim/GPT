@@ -202,7 +202,7 @@ def load_fixed_ef_knowledge(knowledge: dict) -> dict:
         knowledge.update(load_ef_excel(str(ef_path)))
         print(f"[INFO] EF 엑셀 로딩 완료(파일명={DEFAULT_EF_FILENAME}): {ef_path}")
     except Exception as exc:  # keep demo alive in exe environments
-        print(f"[WARN] EF 엑셀 로딩 실패: {exc}")
+        print(f"[WARN] EF 엑셀 로딩 실패: {exc}\n[HINT] .xlsx 로딩에는 openpyxl이 필요합니다. `pip install openpyxl`")
         print("[INFO] 기본 샘플 지식으로 계속 실행합니다.")
 
     return knowledge

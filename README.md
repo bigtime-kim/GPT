@@ -57,6 +57,8 @@ python run_demo.py --name "VMQ"
 ---
 
 ## Gemini Bad Request 대응
+키 붙여넣기 시 이상문자(공백/제어문자)가 섞여도 자동 정리 후 첫 유효 키 토큰을 사용합니다.
+
 진단:
 ```powershell
 python run_demo.py --diag --name "VMQ"

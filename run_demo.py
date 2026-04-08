@@ -12,11 +12,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import traceback
 from pathlib import Path
 from pprint import pprint
 from urllib import error, request
+import http.client
 
 from mapping_engine import MappingEngine, load_ef_file
 
@@ -135,7 +137,7 @@ def gemini_assist_from_api_key(api_key: str, model: str):
 
         try:
             return _call_gemini_structured(payload, api_key=api_key, model=model)
-        except (error.URLError, error.HTTPError, TimeoutError, ValueError, json.JSONDecodeError) as exc:
+        except (error.URLError, error.HTTPError, TimeoutError, ValueError, json.JSONDecodeError, http.client.InvalidURL) as exc:
             return {
                 "proxy_candidates": ["ecoinvent:eng_plastic_proxy_dataset"],
                 "confidence": 0.55,
@@ -231,9 +233,24 @@ def resolve_ai_mode(interactive: bool, disable_ai_arg: bool, key_arg: str | None
     key = key_arg or os.getenv("GEMINI_API_KEY", "") or DEMO_GEMINI_API_KEY
     if interactive and not key:
         key = input("GEMINI_API_KEY 입력(필수, 입력값 표시됨): ").strip()
+    key = normalize_gemini_key(key)
     if not key:
         raise ValueError("GEMINI_API_KEY is required. Set env var or pass --gemini-api-key. (Use --no-ai only for debug)")
     return True, key
+
+
+def normalize_gemini_key(raw: str) -> str:
+    """Sanitize pasted key and keep first valid Gemini key token if present."""
+    if not raw:
+        return ""
+    text = raw.strip().replace("\x00", "").replace("\x01", "")
+    # remove whitespace/control chars
+    text = "".join(ch for ch in text if ch.isprintable() and not ch.isspace())
+    # common Gemini key pattern starts with AIza
+    m = re.search(r"AIza[A-Za-z0-9_-]{20,}", text)
+    if m:
+        return m.group(0)
+    return text
 
 
 def run() -> int:

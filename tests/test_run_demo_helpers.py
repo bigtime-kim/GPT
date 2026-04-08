@@ -9,6 +9,7 @@ from run_demo import (
     get_ef_search_paths,
     load_fixed_ef_knowledge,
     locate_ef_file,
+    normalize_gemini_key,
     resolve_ai_mode,
 )
 
@@ -64,6 +65,12 @@ class RunDemoHelperTest(unittest.TestCase):
         use_ai, key = resolve_ai_mode(interactive=True, disable_ai_arg=True, key_arg=None)
         self.assertFalse(use_ai)
         self.assertEqual(key, "")
+
+    def test_normalize_gemini_key(self):
+        raw = "  AIzaSyTESTKEY1234567890abcdEFGHijklmn\x01\x01  EXTRA_TEXT"
+        normalized = normalize_gemini_key(raw)
+        self.assertTrue(normalized.startswith("AIza"))
+        self.assertNotIn("\x01", normalized)
 
 
 if __name__ == "__main__":

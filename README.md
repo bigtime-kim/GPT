@@ -1,6 +1,6 @@
 # PCF Mapping Prototype
 
-처음 보시면 헷갈릴 수 있어서, **다운로드부터 실행까지** 딱 3단계로 설명합니다.
+처음 보시면 헷갈릴 수 있어서, **다운로드부터 실행(.exe 포함)까지** 순서대로 설명합니다.
 
 ## 0) 이 프로젝트는 뭐하는 건가?
 공장 활동명(예: `VMQ`, `EN AW 6005A T6`, `Thermiga 80127`)을 받아서,
@@ -25,31 +25,100 @@ Python 3.10+가 필요합니다.
 
 ---
 
-## 2) 바로 실행(가장 쉬운 방법)
-아래 한 줄로 데모 실행이 됩니다.
+## 2) 먼저 Python으로 실행 확인 (필수)
+실행 파일(.exe) 만들기 전에 이 단계가 먼저 정상이어야 합니다.
 
+### 2-1) 인터랙티브 실행
+```bash
+python run_demo.py
+```
+
+실행되면 `활동명 입력:`이 뜹니다.
+예: `VMQ` 입력 → 결과 출력.
+
+### 2-2) 한 줄 실행
 ```bash
 python run_demo.py --name "VMQ"
 ```
 
-AI fallback까지 보고 싶으면:
-
+### 2-3) AI fallback 테스트
 ```bash
 python run_demo.py --name "Thermiga 80127" --use-ai
 ```
 
 ---
 
-## 3) 테스트 돌려보기
-정상 동작 확인은 아래 명령으로 하면 됩니다.
+## 3) AI API 키는 어디에 넣어?
+권장 방식은 **환경변수**입니다.
 
+### Linux / macOS
+```bash
+export OPENAI_API_KEY="your_api_key_here"
+python run_demo.py --use-ai
+```
+
+### Windows PowerShell
+```powershell
+$env:OPENAI_API_KEY="your_api_key_here"
+python run_demo.py --use-ai
+```
+
+또는 임시로 `--api-key` 인자를 줄 수 있습니다(권장 X).
+
+```bash
+python run_demo.py --use-ai --api-key "your_api_key_here"
+```
+
+> 실제 API 호출 로직은 `run_demo.py`의 `ai_assist_from_api_key()` 함수 위치에 연결하면 됩니다.
+
+---
+
+## 4) exe 만들기 (Windows)
+`run_demo.py`는 실행 시작 파일(main)입니다. 이 파일을 exe로 패키징하면 됩니다.
+
+### 4-1) PyInstaller 설치
+```bash
+pip install pyinstaller
+pyinstaller --version
+```
+
+### 4-2) exe 빌드
+```bash
+pyinstaller --onefile run_demo.py
+```
+
+빌드 후:
+- `build/`
+- `dist/`
+
+실행 파일:
+- `dist/run_demo.exe`
+
+### 4-3) 실행
+PowerShell:
+```powershell
+.\dist\run_demo.exe
+```
+
+또는 탐색기에서 `dist/run_demo.exe` 더블클릭.
+
+### 4-4) 아이콘 넣기(선택)
+```bash
+pyinstaller --onefile --icon=icon.ico run_demo.py
+```
+
+> `input()/print()` 기반 콘솔 앱이므로 `--noconsole`은 사용하지 않는 게 맞습니다.
+
+---
+
+## 5) 테스트 실행
 ```bash
 python -m unittest discover -s tests -v
 ```
 
 ---
 
-## 4) 코드 직접 써서 실행하고 싶으면
+## 6) 코드 직접 써서 실행하고 싶으면
 ```python
 from mapping_engine import MappingEngine
 
@@ -72,13 +141,3 @@ engine = MappingEngine(knowledge)
 print(engine.map_activity("VMQ"))
 print(engine.map_activity("EN AW 6005A T6"))
 ```
-
----
-
-## 5) API key/Excel은 언제 넣어?
-현재는 샘플 데이터로 동작하는 프로토타입입니다.
-실서비스 연결 시 아래 순서로 넣으면 됩니다.
-
-1. AI 연결 직전: API key, model, rate limit 정책
-2. 지식 부트스트랩: DB catalog, synonym/abbreviation, ontology, spec/alloy, waste/energy/policy, mapping registry
-3. 운영 전환 직전: policy/geography 최신본, approved mapping registry 최신본

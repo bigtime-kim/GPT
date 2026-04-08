@@ -1,13 +1,20 @@
 """Simple CLI demo for the PCF mapping prototype.
 
-Usage:
+Interactive mode (default):
+  python run_demo.py
+
+Non-interactive mode:
   python run_demo.py --name "VMQ"
-  python run_demo.py --name "Thermiga 80127" --use-ai
+
+AI mode with API key from env:
+  export OPENAI_API_KEY="..."
+  python run_demo.py --use-ai
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 from pprint import pprint
 
 from mapping_engine import MappingEngine
@@ -39,17 +46,55 @@ def fake_ai(_payload):
     }
 
 
+def ai_assist_from_api_key(api_key: str):
+    """Placeholder for real AI integration.
+
+    Where to put API key:
+      - Recommended: environment variable OPENAI_API_KEY
+      - Optional: pass --api-key directly (not recommended for production)
+    """
+
+    def _ai(payload):
+        # TODO: Replace with real API call.
+        # Example integration point:
+        # 1) Build structured request from payload
+        # 2) Send to LLM API using api_key
+        # 3) Parse JSON response into required schema
+        if not api_key:
+            return fake_ai(payload)
+
+        return {
+            "proxy_candidates": ["ecoinvent:eng_plastic_proxy_dataset"],
+            "confidence": 0.65,
+            "review_required": True,
+            "reason": "AI fallback stub used (replace with real API call)",
+        }
+
+    return _ai
+
+
 def main():
     parser = argparse.ArgumentParser(description="Run a mapping demo with sample knowledge")
-    parser.add_argument("--name", required=True, help="Activity name to map")
+    parser.add_argument("--name", help="Activity name to map (if omitted, interactive prompt is used)")
     parser.add_argument("--use-ai", action="store_true", help="Enable AI fallback for unresolved names")
+    parser.add_argument("--api-key", help="Optional API key override. Prefer OPENAI_API_KEY env var.")
     args = parser.parse_args()
 
-    ai = fake_ai if args.use_ai else None
-    engine = MappingEngine(build_knowledge(), ai_assist=ai)
-    result = engine.map_activity(args.name)
+    api_key = args.api_key or os.getenv("OPENAI_API_KEY", "")
+    ai = ai_assist_from_api_key(api_key) if args.use_ai else None
 
+    engine = MappingEngine(build_knowledge(), ai_assist=ai)
+
+    print("=== Mapping Demo ===")
+    activity_name = args.name if args.name else input("활동명 입력: ").strip()
+
+    result = engine.map_activity(activity_name)
+
+    print("\n=== Result ===")
     pprint(result)
+
+    if not args.name:
+        input("\n엔터를 누르면 종료됩니다.")
 
 
 if __name__ == "__main__":

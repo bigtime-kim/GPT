@@ -40,18 +40,16 @@ class RunDemoHelperTest(unittest.TestCase):
             finally:
                 os.chdir(original)
 
-    def test_load_fixed_ef_knowledge_never_raises(self):
+    def test_load_fixed_ef_knowledge_raises_on_error(self):
         with patch("run_demo.locate_ef_file", return_value=Path("dummy.xlsx")), patch(
             "run_demo.load_ef_excel", side_effect=RuntimeError("boom")
         ):
-            knowledge = {"db_catalog": {}}
-            result = load_fixed_ef_knowledge(knowledge)
-            self.assertIn("db_catalog", result)
+            with self.assertRaises(RuntimeError):
+                load_fixed_ef_knowledge({"db_catalog": {}})
 
-    def test_resolve_ai_mode_default_on(self):
-        use_ai, key = resolve_ai_mode(interactive=True, disable_ai_arg=False, key_arg=None)
-        self.assertTrue(use_ai)
-        self.assertEqual(key, "")
+    def test_resolve_ai_mode_requires_key(self):
+        with self.assertRaises(ValueError):
+            resolve_ai_mode(interactive=True, disable_ai_arg=False, key_arg=None)
 
     def test_resolve_ai_mode_can_disable(self):
         use_ai, key = resolve_ai_mode(interactive=True, disable_ai_arg=True, key_arg=None)

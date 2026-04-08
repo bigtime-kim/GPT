@@ -181,34 +181,28 @@ def _list_excel_hints() -> list[str]:
 
 
 def load_fixed_ef_knowledge(knowledge: dict) -> dict:
-    """Try loading fixed-name EF file. Never raise; returns updated knowledge."""
+    """Load fixed-name EF file in strict mode. Raises on any issue."""
     ef_path = locate_ef_file()
     if not ef_path:
-        print(f"[WARN] {DEFAULT_EF_FILENAME} 파일을 찾지 못했습니다.")
-        print("[INFO] 검색 경로:")
-        for p in get_ef_search_paths():
-            print(f"  - {p}")
-
+        lines = [f"{DEFAULT_EF_FILENAME} 파일을 찾지 못했습니다.", "검색 경로:"]
+        lines.extend([f"  - {p}" for p in get_ef_search_paths()])
         hints = _list_excel_hints()
         if hints:
-            print("[INFO] 주변에서 발견된 Excel 파일:")
-            for h in hints:
-                print(f"  - {h}")
-
-        print("[INFO] 기본 샘플 지식으로 실행합니다.")
-        return knowledge
+            lines.append("주변 Excel 파일:")
+            lines.extend([f"  - {h}" for h in hints])
+        raise FileNotFoundError("\n".join(lines))
 
     try:
         knowledge.update(load_ef_excel(str(ef_path)))
         print(f"[INFO] EF 엑셀 로딩 완료(파일명={DEFAULT_EF_FILENAME}): {ef_path}")
-    except Exception as exc:  # keep demo alive in exe environments
-        print(f"[WARN] EF 엑셀 로딩 실패: {exc}\n[HINT] .xlsx 로딩에는 openpyxl이 필요합니다. `pip install openpyxl`")
-        print(f"[HINT] 현재 python: {sys.executable}")
-        print(f"[HINT] 이 Python에 설치: '{sys.executable}' -m pip install openpyxl")
-        print("[HINT] exe 사용 중이면 PyInstaller 빌드 시 openpyxl 포함 필요: pyinstaller --onefile run_demo.py --collect-all openpyxl")
-        print("[INFO] 기본 샘플 지식으로 계속 실행합니다.")
-
-    return knowledge
+        return knowledge
+    except Exception as exc:
+        raise RuntimeError(
+            f"EF 엑셀 로딩 실패: {exc}\n"
+            f"현재 python: {sys.executable}\n"
+            f"이 Python에 설치: '{sys.executable}' -m pip install openpyxl\n"
+            "exe 사용 중이면: pyinstaller --onefile run_demo.py --collect-all openpyxl"
+        ) from exc
 
 
 
@@ -228,8 +222,9 @@ def resolve_ai_mode(interactive: bool, disable_ai_arg: bool, key_arg: str | None
     if disable_ai_arg:
         return False, ""
 
-    # No blocking prompt: if key is missing, run with local AI stub.
     key = key_arg or os.getenv("GEMINI_API_KEY", "") or DEMO_GEMINI_API_KEY
+    if not key:
+        raise ValueError("GEMINI_API_KEY is required. Set env var or pass --gemini-api-key. (Use --no-ai only for debug)")
     return True, key
 
 

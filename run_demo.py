@@ -1,20 +1,18 @@
 """Simple CLI demo for the PCF mapping prototype.
 
-Interactive mode (default):
+Default interactive flow:
   python run_demo.py
 
-Use Excel emission-factor table:
-  python run_demo.py --ef-excel ./emission_factor.xlsx
-
-AI mode with Gemini key from env:
-  export GEMINI_API_KEY="..."
-  python run_demo.py --use-ai
+You can still pass arguments for automation:
+  python run_demo.py --ef-excel ./emission_factor.xlsx --name "VMQ" --geo KR --unit kg --use-ai
 """
 
 from __future__ import annotations
 
 import argparse
+import getpass
 import os
+from pathlib import Path
 from pprint import pprint
 
 from mapping_engine import MappingEngine, load_ef_excel
@@ -64,6 +62,43 @@ def gemini_assist_from_api_key(api_key: str, model: str):
     return _ai
 
 
+def resolve_excel_path(interactive: bool, arg_path: str | None) -> str | None:
+    if arg_path:
+        return arg_path
+
+    default_name = "emission_factor.xlsx"
+    default_path = Path.cwd() / default_name
+    if default_path.exists():
+        return str(default_path)
+
+    if not interactive:
+        return None
+
+    raw = input(f"엑셀 경로 입력 (없으면 엔터, 기본파일명 {default_name}): ").strip()
+    if not raw:
+        return None
+    return raw
+
+
+def resolve_ai_mode(interactive: bool, use_ai_arg: bool, key_arg: str | None) -> tuple[bool, str]:
+    if use_ai_arg:
+        key = key_arg or os.getenv("GEMINI_API_KEY", "")
+        return True, key
+
+    if not interactive:
+        return False, ""
+
+    answer = input("Gemini AI fallback 사용? (y/N): ").strip().lower()
+    if answer not in {"y", "yes"}:
+        return False, ""
+
+    key = key_arg or os.getenv("GEMINI_API_KEY", "")
+    if not key:
+        key = getpass.getpass("GEMINI_API_KEY 입력(화면에 표시되지 않음): ").strip()
+
+    return True, key
+
+
 def main():
     parser = argparse.ArgumentParser(description="Run a mapping demo with sample knowledge or Excel EF table")
     parser.add_argument("--name", help="Activity name to map (if omitted, interactive prompt is used)")
@@ -75,26 +110,32 @@ def main():
     parser.add_argument("--gemini-api-key", help="Optional Gemini key override. Prefer GEMINI_API_KEY env var.")
     args = parser.parse_args()
 
-    knowledge = build_default_knowledge()
-    if args.ef_excel:
-        knowledge.update(load_ef_excel(args.ef_excel))
+    interactive = args.name is None
 
-    gemini_key = args.gemini_api_key or os.getenv("GEMINI_API_KEY", "")
-    ai = gemini_assist_from_api_key(gemini_key, args.gemini_model) if args.use_ai else None
+    knowledge = build_default_knowledge()
+    ef_path = resolve_excel_path(interactive, args.ef_excel)
+    if ef_path:
+        knowledge.update(load_ef_excel(ef_path))
+        print(f"[INFO] EF 엑셀 로딩 완료: {ef_path}")
+    else:
+        print("[INFO] EF 엑셀 없이 기본 샘플 지식으로 실행합니다.")
+
+    use_ai, gemini_key = resolve_ai_mode(interactive, args.use_ai, args.gemini_api_key)
+    ai = gemini_assist_from_api_key(gemini_key, args.gemini_model) if use_ai else None
 
     engine = MappingEngine(knowledge, ai_assist=ai)
 
     print("=== Mapping Demo ===")
-    activity_name = args.name if args.name else input("활동명 입력: ").strip()
-    geography = args.geo if args.geo else (input("Geography (optional): ").strip() if not args.name else "")
-    unit = args.unit if args.unit else (input("Unit (optional): ").strip() if not args.name else "")
+    activity_name = args.name if args.name else input("물질/활동명 입력: ").strip()
+    geography = args.geo if args.geo else (input("Geography (optional): ").strip() if interactive else "")
+    unit = args.unit if args.unit else (input("Unit (optional): ").strip() if interactive else "")
 
     result = engine.map_activity(activity_name, geography_hint=geography, unit_hint=unit)
 
     print("\n=== Result ===")
     pprint(result)
 
-    if not args.name:
+    if interactive:
         input("\n엔터를 누르면 종료됩니다.")
 
 

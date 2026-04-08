@@ -9,10 +9,17 @@ This module demonstrates the architecture split:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
 
 AUTO_ACCEPT_THRESHOLD = 0.9
+REQUIRED_EF_COLUMNS = [
+    "Activity Name",
+    "Geography",
+    "Reference Product Name",
+    "Reference Product Unit",
+]
 
 
 @dataclass
@@ -73,8 +80,14 @@ class MappingEngine:
         synonyms = self.knowledge.get("synonym", {})
         return synonyms.get(normalized_name, normalized_name)
 
-    def generate_candidates(self, canonical_form: str) -> List[str]:
+    def generate_candidates(
+        self,
+        canonical_form: str,
+        geography_hint: str = "",
+        unit_hint: str = "",
+    ) -> List[str]:
         catalog = self.knowledge.get("db_catalog", {})
+
         if canonical_form in catalog:
             return [catalog[canonical_form]]
 
@@ -86,9 +99,35 @@ class MappingEngine:
         if canonical_form in proxies and proxies[canonical_form] in catalog:
             return [catalog[proxies[canonical_form]]]
 
+        # Emission factor table candidate matching with geography fallback.
+        ef_rows = self.knowledge.get("ef_rows", {})
+        if ef_rows:
+            geo = (geography_hint or "").strip().lower()
+            unit = (unit_hint or "").strip().lower()
+            keys = []
+            if geo:
+                keys.append(f"{canonical_form}|{geo}|{unit}")
+                keys.append(f"{canonical_form}|{geo}|")
+            keys.append(f"{canonical_form}|row|{unit}")
+            keys.append(f"{canonical_form}|row|")
+            keys.append(f"{canonical_form}|glo|{unit}")
+            keys.append(f"{canonical_form}|glo|")
+            keys.append(f"{canonical_form}||{unit}")
+            keys.append(f"{canonical_form}||")
+
+            for key in keys:
+                if key in ef_rows:
+                    return [ef_rows[key]]
+
         return []
 
-    def map_activity(self, raw_name: str, source_type: str = "") -> MappingResult:
+    def map_activity(
+        self,
+        raw_name: str,
+        source_type: str = "",
+        geography_hint: str = "",
+        unit_hint: str = "",
+    ) -> MappingResult:
         normalized = self.preprocess(raw_name)
         name_type = self.classify_name_type(normalized)
         canonical = self.canonicalize(normalized, name_type)
@@ -97,9 +136,11 @@ class MappingEngine:
             f"preprocess={normalized}",
             f"name_type={name_type}",
             f"canonical={canonical}",
+            f"geography_hint={geography_hint}",
+            f"unit_hint={unit_hint}",
         ]
 
-        candidates = self.generate_candidates(canonical)
+        candidates = self.generate_candidates(canonical, geography_hint, unit_hint)
 
         if candidates:
             status = "exact"
@@ -107,6 +148,9 @@ class MappingEngine:
                 status = "family"
             if canonical in self.knowledge.get("proxy", {}):
                 status = "proxy"
+
+            if self.knowledge.get("ef_rows", {}):
+                status = "exact"
 
             confidence = {"exact": 0.98, "family": 0.85, "proxy": 0.7}[status]
             review_required = confidence < AUTO_ACCEPT_THRESHOLD
@@ -120,6 +164,8 @@ class MappingEngine:
                 "source_type": source_type,
                 "normalized_name": normalized,
                 "canonical_hint": canonical,
+                "geography_hint": geography_hint,
+                "unit_hint": unit_hint,
                 "knowledge_hits": [],
             }
             ai_response = self.ai_assist(ai_request)
@@ -144,14 +190,63 @@ class MappingEngine:
         )
 
 
+def load_ef_excel(path: str) -> Dict[str, Dict[str, str]]:
+    """Load emission factor rows from Excel with required columns.
+
+    Required columns:
+    - Activity Name
+    - Geography
+    - Reference Product Name
+    - Reference Product Unit
+    """
+
+    try:
+        from openpyxl import load_workbook
+    except ImportError as exc:
+        raise ImportError("openpyxl is required to read .xlsx files. Install with `pip install openpyxl`.") from exc
+
+    xlsx_path = Path(path)
+    wb = load_workbook(xlsx_path, read_only=True, data_only=True)
+    ws = wb.active
+
+    rows = ws.iter_rows(min_row=1, max_row=1, values_only=True)
+    header = [str(col).strip() if col is not None else "" for col in next(rows)]
+
+    missing = [c for c in REQUIRED_EF_COLUMNS if c not in header]
+    if missing:
+        raise ValueError(f"Missing required columns: {missing}")
+
+    index = {name: header.index(name) for name in REQUIRED_EF_COLUMNS}
+
+    ef_rows: Dict[str, str] = {}
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        activity = str(row[index["Activity Name"]] or "").strip().lower()
+        geography = str(row[index["Geography"]] or "").strip().lower()
+        ref_name = str(row[index["Reference Product Name"]] or "").strip()
+        ref_unit = str(row[index["Reference Product Unit"]] or "").strip().lower()
+
+        if not activity:
+            continue
+
+        dataset_value = f"{ref_name} [{ref_unit}] ({geography or 'unspecified geo'})"
+        key = f"{activity}|{geography}|{ref_unit}"
+        ef_rows[key] = dataset_value
+
+        # fallback key without unit
+        key_no_unit = f"{activity}|{geography}|"
+        ef_rows.setdefault(key_no_unit, dataset_value)
+
+    return {"ef_rows": ef_rows}
+
+
 def required_uploads(stage: str) -> List[str]:
     """Return user-upload requirements per delivery stage."""
     stage = stage.lower()
     if stage == "ai_connection":
-        return ["api_key", "model", "rate_limit_policy"]
+        return ["gemini_api_key", "gemini_model", "rate_limit_policy"]
     if stage == "knowledge_bootstrap":
         return [
-            "db_catalog.xlsx",
+            "emission_factor.xlsx(Activity Name, Geography, Reference Product Name, Reference Product Unit)",
             "synonym_abbreviation.xlsx",
             "material_ontology.xlsx",
             "spec_alloy_master.xlsx",

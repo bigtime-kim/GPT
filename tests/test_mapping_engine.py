@@ -1,6 +1,9 @@
+import importlib.util
+import tempfile
 import unittest
+from pathlib import Path
 
-from mapping_engine import MappingEngine, required_uploads
+from mapping_engine import MappingEngine, load_ef_excel, required_uploads
 
 
 class MappingEngineTest(unittest.TestCase):
@@ -57,9 +60,35 @@ class MappingEngineTest(unittest.TestCase):
         self.assertEqual(ambiguous.selected_dataset, "ecoinvent:eng_plastic_proxy_dataset")
 
     def test_required_uploads(self):
-        self.assertIn("api_key", required_uploads("ai_connection"))
-        self.assertIn("db_catalog.xlsx", required_uploads("knowledge_bootstrap"))
+        self.assertIn("gemini_api_key", required_uploads("ai_connection"))
+        self.assertIn(
+            "emission_factor.xlsx(Activity Name, Geography, Reference Product Name, Reference Product Unit)",
+            required_uploads("knowledge_bootstrap"),
+        )
         self.assertIn("approved_mapping_registry.xlsx", required_uploads("go_live"))
+
+    @unittest.skipUnless(importlib.util.find_spec("openpyxl") is not None, "openpyxl not installed")
+    def test_load_ef_excel_and_map_by_geography(self):
+        from openpyxl import Workbook
+
+        wb = Workbook()
+        ws = wb.active
+        ws.append(["Activity Name", "Geography", "Reference Product Name", "Reference Product Unit"])
+        ws.append(["electricity, medium voltage", "KR", "market for electricity, medium voltage", "kWh"])
+        ws.append(["electricity, medium voltage", "RoW", "market for electricity, medium voltage", "kWh"])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "ef.xlsx"
+            wb.save(path)
+
+            ef_knowledge = load_ef_excel(str(path))
+            merged = dict(self.knowledge)
+            merged.update(ef_knowledge)
+            engine = MappingEngine(merged)
+
+            result = engine.map_activity("electricity, medium voltage", geography_hint="KR", unit_hint="kWh")
+            self.assertEqual(result.status, "exact")
+            self.assertIn("(kr)", result.selected_dataset.lower())
 
 
 if __name__ == "__main__":

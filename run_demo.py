@@ -124,10 +124,12 @@ def gemini_assist_from_api_key(api_key: str, model: str):
 
     def _ai(payload):
         if not api_key:
+            top = payload.get("search_top_n", [])
+            fallback = top[0] if top else "ecoinvent:eng_plastic_proxy_dataset"
             return {
-                "proxy_candidates": ["ecoinvent:eng_plastic_proxy_dataset"],
-                "confidence": 0.62,
-                "review_required": True,
+                "proxy_candidates": [fallback],
+                "confidence": 0.80,
+                "review_required": False if top else True,
                 "reason": "Gemini key not set, using local AI stub",
             }
 
@@ -221,14 +223,14 @@ def print_runtime_diagnostics() -> None:
         print("[DIAG] openpyxl import failed:", exc)
 
 
-def resolve_ai_mode(interactive: bool, use_ai_arg: bool, key_arg: str | None) -> tuple[bool, str]:
-    # Default is deterministic-only mode for "just run" UX.
-    if not use_ai_arg:
+def resolve_ai_mode(interactive: bool, disable_ai_arg: bool, key_arg: str | None) -> tuple[bool, str]:
+    # AI-first mode by default. Use --no-ai only for debugging.
+    if disable_ai_arg:
         return False, ""
 
     key = key_arg or os.getenv("GEMINI_API_KEY", "") or DEMO_GEMINI_API_KEY
     if interactive and not key:
-        key = getpass.getpass("GEMINI_API_KEY 입력(화면에 표시되지 않음): ").strip()
+        key = getpass.getpass("GEMINI_API_KEY 입력(없으면 엔터): ").strip()
 
     return True, key
 
@@ -238,7 +240,7 @@ def run() -> int:
     parser.add_argument("--name", help="Activity name to map (if omitted, interactive prompt is used)")
     parser.add_argument("--geo", default="", help="Geography hint (e.g., KR, US, GLO, RoW)")
     parser.add_argument("--unit", default="", help="Reference product unit hint (e.g., kg, kWh)")
-    parser.add_argument("--use-ai", action="store_true", help="Enable Gemini fallback (default: OFF, deterministic-only)")
+    parser.add_argument("--no-ai", action="store_true", help="Disable AI (debug only). Default is AI-first mode")
     parser.add_argument("--gemini-model", default="gemini-2.0-flash", help="Gemini model name")
     parser.add_argument("--gemini-api-key", help="Optional Gemini key override. Prefer GEMINI_API_KEY env var.")
     parser.add_argument("--diag", action="store_true", help="Print runtime diagnostics (python path, openpyxl import)")
@@ -252,7 +254,7 @@ def run() -> int:
     knowledge = build_default_knowledge()
     knowledge = load_fixed_ef_knowledge(knowledge)
 
-    use_ai, gemini_key = resolve_ai_mode(interactive, args.use_ai, args.gemini_api_key)
+    use_ai, gemini_key = resolve_ai_mode(interactive, args.no_ai, args.gemini_api_key)
     ai = gemini_assist_from_api_key(gemini_key, args.gemini_model) if use_ai else None
 
     engine = MappingEngine(knowledge, ai_assist=ai)

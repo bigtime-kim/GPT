@@ -37,7 +37,7 @@ class MappingEngineTest(unittest.TestCase):
 
         self.assertEqual(result.selected_dataset, "ecoinvent:alu_extrusion_dataset")
 
-    def test_ai_assist_called_only_when_needed(self):
+    def test_ai_assist_called_for_reranking_and_unresolved(self):
         calls = {"count": 0}
 
         def fake_ai(_payload):
@@ -52,10 +52,10 @@ class MappingEngineTest(unittest.TestCase):
         engine = MappingEngine(self.knowledge, ai_assist=fake_ai)
 
         deterministic = engine.map_activity("VMQ")
-        self.assertNotIn("ai_assist_called=true", deterministic.trace_log)
+        self.assertIn("ai_assist_called=true", deterministic.trace_log)
 
         ambiguous = engine.map_activity("Thermiga 80127")
-        self.assertEqual(calls["count"], 1)
+        self.assertEqual(calls["count"], 2)
         self.assertEqual(ambiguous.status, "review")
         self.assertEqual(ambiguous.selected_dataset, "ecoinvent:eng_plastic_proxy_dataset")
 

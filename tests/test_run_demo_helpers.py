@@ -48,16 +48,16 @@ class RunDemoHelperTest(unittest.TestCase):
             result = load_fixed_ef_knowledge(knowledge)
             self.assertIn("db_catalog", result)
 
-    def test_resolve_ai_mode_prompt_and_key_input(self):
-        with patch("builtins.input", return_value="y"), patch("getpass.getpass", return_value="abc123"):
-            use_ai, key = resolve_ai_mode(interactive=True, use_ai_arg=False, key_arg=None)
+    def test_resolve_ai_mode_default_off(self):
+        use_ai, key = resolve_ai_mode(interactive=True, use_ai_arg=False, key_arg=None)
+        self.assertFalse(use_ai)
+        self.assertEqual(key, "")
+
+    def test_resolve_ai_mode_use_arg_and_prompt_key(self):
+        with patch("getpass.getpass", return_value="abc123"):
+            use_ai, key = resolve_ai_mode(interactive=True, use_ai_arg=True, key_arg=None)
             self.assertTrue(use_ai)
             self.assertEqual(key, "abc123")
-
-    def test_resolve_ai_mode_use_arg(self):
-        use_ai, key = resolve_ai_mode(interactive=False, use_ai_arg=True, key_arg="my-key")
-        self.assertTrue(use_ai)
-        self.assertEqual(key, "my-key")
 
 
 if __name__ == "__main__":

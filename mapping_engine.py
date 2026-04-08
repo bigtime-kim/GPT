@@ -9,6 +9,7 @@ This module demonstrates the architecture split:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
@@ -80,6 +81,36 @@ class MappingEngine:
         synonyms = self.knowledge.get("synonym", {})
         return synonyms.get(normalized_name, normalized_name)
 
+    @staticmethod
+    def _sim(a: str, b: str) -> float:
+        return SequenceMatcher(None, a, b).ratio()
+
+    def _fuzzy_ef_candidate(self, canonical_form: str, geography_hint: str, unit_hint: str) -> Optional[str]:
+        records = self.knowledge.get("ef_records", [])
+        if not records:
+            return None
+
+        geo = (geography_hint or "").strip().lower()
+        unit = (unit_hint or "").strip().lower()
+
+        candidates = []
+        for rec in records:
+            # Soft filter by geography/unit if provided.
+            geo_ok = not geo or rec["geography"] in {geo, "", "row", "glo"}
+            unit_ok = not unit or rec["unit"] in {unit, ""}
+            if not geo_ok or not unit_ok:
+                continue
+
+            score = self._sim(canonical_form, rec["activity"])
+            if score >= 0.55:
+                candidates.append((score, rec["dataset"]))
+
+        if not candidates:
+            return None
+
+        candidates.sort(key=lambda x: x[0], reverse=True)
+        return candidates[0][1]
+
     def generate_candidates(
         self,
         canonical_form: str,
@@ -119,6 +150,10 @@ class MappingEngine:
                 if key in ef_rows:
                     return [ef_rows[key]]
 
+        fuzzy = self._fuzzy_ef_candidate(canonical_form, geography_hint, unit_hint)
+        if fuzzy:
+            return [fuzzy]
+
         return []
 
     def map_activity(
@@ -149,7 +184,7 @@ class MappingEngine:
             if canonical in self.knowledge.get("proxy", {}):
                 status = "proxy"
 
-            if self.knowledge.get("ef_rows", {}):
+            if self.knowledge.get("ef_rows", {}) or self.knowledge.get("ef_records", {}):
                 status = "exact"
 
             confidence = {"exact": 0.98, "family": 0.85, "proxy": 0.7}[status]
@@ -191,14 +226,7 @@ class MappingEngine:
 
 
 def load_ef_excel(path: str) -> Dict[str, Dict[str, str]]:
-    """Load emission factor rows from Excel with required columns.
-
-    Required columns:
-    - Activity Name
-    - Geography
-    - Reference Product Name
-    - Reference Product Unit
-    """
+    """Load emission factor rows from Excel with required columns."""
 
     try:
         from openpyxl import load_workbook
@@ -219,6 +247,7 @@ def load_ef_excel(path: str) -> Dict[str, Dict[str, str]]:
     index = {name: header.index(name) for name in REQUIRED_EF_COLUMNS}
 
     ef_rows: Dict[str, str] = {}
+    ef_records: List[Dict[str, str]] = []
     for row in ws.iter_rows(min_row=2, values_only=True):
         activity = str(row[index["Activity Name"]] or "").strip().lower()
         geography = str(row[index["Geography"]] or "").strip().lower()
@@ -232,11 +261,19 @@ def load_ef_excel(path: str) -> Dict[str, Dict[str, str]]:
         key = f"{activity}|{geography}|{ref_unit}"
         ef_rows[key] = dataset_value
 
-        # fallback key without unit
         key_no_unit = f"{activity}|{geography}|"
         ef_rows.setdefault(key_no_unit, dataset_value)
 
-    return {"ef_rows": ef_rows}
+        ef_records.append(
+            {
+                "activity": activity,
+                "geography": geography,
+                "unit": ref_unit,
+                "dataset": dataset_value,
+            }
+        )
+
+    return {"ef_rows": ef_rows, "ef_records": ef_records}
 
 
 def required_uploads(stage: str) -> List[str]:

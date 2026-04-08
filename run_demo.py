@@ -80,8 +80,7 @@ def _call_gemini_structured(payload: dict, api_key: str, model: str, timeout: in
             }
         ],
         "generationConfig": {
-            "temperature": 0.1,
-            "responseMimeType": "application/json",
+            "temperature": 0.1
         },
     }
 
@@ -223,19 +222,12 @@ def print_runtime_diagnostics() -> None:
 
 
 def resolve_ai_mode(interactive: bool, use_ai_arg: bool, key_arg: str | None) -> tuple[bool, str]:
-    if use_ai_arg:
-        key = key_arg or os.getenv("GEMINI_API_KEY", "") or DEMO_GEMINI_API_KEY
-        return True, key
-
-    if not interactive:
-        return False, ""
-
-    answer = input("Gemini AI fallback 사용? (y/N): ").strip().lower()
-    if answer not in {"y", "yes"}:
+    # Default is deterministic-only mode for "just run" UX.
+    if not use_ai_arg:
         return False, ""
 
     key = key_arg or os.getenv("GEMINI_API_KEY", "") or DEMO_GEMINI_API_KEY
-    if not key:
+    if interactive and not key:
         key = getpass.getpass("GEMINI_API_KEY 입력(화면에 표시되지 않음): ").strip()
 
     return True, key
@@ -246,7 +238,7 @@ def run() -> int:
     parser.add_argument("--name", help="Activity name to map (if omitted, interactive prompt is used)")
     parser.add_argument("--geo", default="", help="Geography hint (e.g., KR, US, GLO, RoW)")
     parser.add_argument("--unit", default="", help="Reference product unit hint (e.g., kg, kWh)")
-    parser.add_argument("--use-ai", action="store_true", help="Enable AI fallback for unresolved names")
+    parser.add_argument("--use-ai", action="store_true", help="Enable Gemini fallback (default: OFF, deterministic-only)")
     parser.add_argument("--gemini-model", default="gemini-2.0-flash", help="Gemini model name")
     parser.add_argument("--gemini-api-key", help="Optional Gemini key override. Prefer GEMINI_API_KEY env var.")
     parser.add_argument("--diag", action="store_true", help="Print runtime diagnostics (python path, openpyxl import)")

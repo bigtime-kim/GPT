@@ -4,7 +4,7 @@ Default interactive flow:
   python run_demo.py
 
 You can still pass arguments for automation:
-  python run_demo.py --ef-excel ./emission_factor.xlsx --name "VMQ" --geo KR --unit kg --use-ai
+  python run_demo.py --name "VMQ" --geo KR --unit kg --use-ai
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ from mapping_engine import MappingEngine, load_ef_excel
 # Optional direct key input (not recommended for production).
 # If you want, you can write your key here.
 DEMO_GEMINI_API_KEY = ""
+DEFAULT_EF_FILENAME = "emission_factor.xlsx"
 
 
 def build_default_knowledge():
@@ -103,7 +104,6 @@ def _call_gemini_structured(payload: dict, api_key: str, model: str, timeout: in
     text = "".join(part.get("text", "") for part in parts)
     parsed = _extract_json_object(text)
 
-    # Keep only expected contract keys with safe defaults.
     return {
         "name_type": parsed.get("name_type", "material"),
         "canonical_form": parsed.get("canonical_form", payload.get("canonical_hint", "")),
@@ -143,22 +143,8 @@ def gemini_assist_from_api_key(api_key: str, model: str):
     return _ai
 
 
-def resolve_excel_path(interactive: bool, arg_path: str | None) -> str | None:
-    if arg_path:
-        return arg_path
-
-    default_name = "emission_factor.xlsx"
-    default_path = Path.cwd() / default_name
-    if default_path.exists():
-        return str(default_path)
-
-    if not interactive:
-        return None
-
-    raw = input(f"엑셀 경로 입력 (없으면 엔터, 기본파일명 {default_name}): ").strip()
-    if not raw:
-        return None
-    return raw
+def get_default_ef_path() -> Path:
+    return Path.cwd() / DEFAULT_EF_FILENAME
 
 
 def resolve_ai_mode(interactive: bool, use_ai_arg: bool, key_arg: str | None) -> tuple[bool, str]:
@@ -181,11 +167,10 @@ def resolve_ai_mode(interactive: bool, use_ai_arg: bool, key_arg: str | None) ->
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Run a mapping demo with sample knowledge or Excel EF table")
+    parser = argparse.ArgumentParser(description="Run a mapping demo with sample knowledge + fixed Excel file name")
     parser.add_argument("--name", help="Activity name to map (if omitted, interactive prompt is used)")
     parser.add_argument("--geo", default="", help="Geography hint (e.g., KR, US, GLO, RoW)")
     parser.add_argument("--unit", default="", help="Reference product unit hint (e.g., kg, kWh)")
-    parser.add_argument("--ef-excel", help="Path to Excel with columns: Activity Name, Geography, Reference Product Name, Reference Product Unit")
     parser.add_argument("--use-ai", action="store_true", help="Enable AI fallback for unresolved names")
     parser.add_argument("--gemini-model", default="gemini-2.0-flash", help="Gemini model name")
     parser.add_argument("--gemini-api-key", help="Optional Gemini key override. Prefer GEMINI_API_KEY env var.")
@@ -194,12 +179,12 @@ def main():
     interactive = args.name is None
 
     knowledge = build_default_knowledge()
-    ef_path = resolve_excel_path(interactive, args.ef_excel)
-    if ef_path:
-        knowledge.update(load_ef_excel(ef_path))
-        print(f"[INFO] EF 엑셀 로딩 완료: {ef_path}")
+    ef_path = get_default_ef_path()
+    if ef_path.exists():
+        knowledge.update(load_ef_excel(str(ef_path)))
+        print(f"[INFO] EF 엑셀 로딩 완료(고정파일명): {ef_path}")
     else:
-        print("[INFO] EF 엑셀 없이 기본 샘플 지식으로 실행합니다.")
+        print(f"[INFO] {DEFAULT_EF_FILENAME} 파일이 없어 기본 샘플 지식으로 실행합니다.")
 
     use_ai, gemini_key = resolve_ai_mode(interactive, args.use_ai, args.gemini_api_key)
     ai = gemini_assist_from_api_key(gemini_key, args.gemini_model) if use_ai else None

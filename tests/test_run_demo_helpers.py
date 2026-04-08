@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from run_demo import _extract_json_object, resolve_ai_mode, resolve_excel_path
+from run_demo import _extract_json_object, get_default_ef_path, resolve_ai_mode
 
 
 class RunDemoHelperTest(unittest.TestCase):
@@ -16,22 +16,15 @@ class RunDemoHelperTest(unittest.TestCase):
         parsed = _extract_json_object('```json\n{"review_required":true}\n```')
         self.assertTrue(parsed["review_required"])
 
-    def test_resolve_excel_path_uses_default_when_exists(self):
+    def test_get_default_ef_path(self):
         with tempfile.TemporaryDirectory() as tmp:
-            cwd = Path(tmp)
-            (cwd / "emission_factor.xlsx").write_text("dummy")
             original = Path.cwd()
-            os.chdir(cwd)
+            os.chdir(tmp)
             try:
-                resolved = resolve_excel_path(interactive=True, arg_path=None)
-                self.assertTrue(resolved.endswith("emission_factor.xlsx"))
+                path = get_default_ef_path()
+                self.assertTrue(str(path).endswith("emission_factor.xlsx"))
             finally:
                 os.chdir(original)
-
-    def test_resolve_excel_path_from_input(self):
-        with patch("builtins.input", return_value="./my.xlsx"):
-            resolved = resolve_excel_path(interactive=True, arg_path=None)
-            self.assertEqual(resolved, "./my.xlsx")
 
     def test_resolve_ai_mode_prompt_and_key_input(self):
         with patch("builtins.input", return_value="y"), patch("getpass.getpass", return_value="abc123"):

@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from run_demo import _extract_json_object, get_default_ef_path, resolve_ai_mode
+from run_demo import _extract_json_object, locate_ef_file, resolve_ai_mode
 
 
 class RunDemoHelperTest(unittest.TestCase):
@@ -16,13 +16,16 @@ class RunDemoHelperTest(unittest.TestCase):
         parsed = _extract_json_object('```json\n{"review_required":true}\n```')
         self.assertTrue(parsed["review_required"])
 
-    def test_get_default_ef_path(self):
+    def test_locate_ef_file_finds_in_cwd(self):
         with tempfile.TemporaryDirectory() as tmp:
             original = Path.cwd()
             os.chdir(tmp)
             try:
-                path = get_default_ef_path()
-                self.assertTrue(str(path).endswith("emission_factor.xlsx"))
+                ef = Path(tmp) / "emission_factor.xlsx"
+                ef.write_text("dummy")
+                found = locate_ef_file()
+                self.assertIsNotNone(found)
+                self.assertEqual(found.resolve(), ef.resolve())
             finally:
                 os.chdir(original)
 

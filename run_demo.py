@@ -13,6 +13,7 @@ import argparse
 import getpass
 import json
 import os
+import sys
 from pathlib import Path
 from pprint import pprint
 from urllib import error, request
@@ -143,8 +144,32 @@ def gemini_assist_from_api_key(api_key: str, model: str):
     return _ai
 
 
-def get_default_ef_path() -> Path:
-    return Path.cwd() / DEFAULT_EF_FILENAME
+def _get_base_dir() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent
+
+
+def locate_ef_file() -> Path | None:
+    """Find `emission_factor.xlsx` in common runtime locations.
+
+    Search order:
+    1) current working directory
+    2) script/executable directory
+    3) parent directory of script/executable (useful for dist/ layout)
+    """
+
+    candidates = [
+        Path.cwd() / DEFAULT_EF_FILENAME,
+        _get_base_dir() / DEFAULT_EF_FILENAME,
+        _get_base_dir().parent / DEFAULT_EF_FILENAME,
+    ]
+
+    for path in candidates:
+        if path.exists():
+            return path
+
+    return None
 
 
 def resolve_ai_mode(interactive: bool, use_ai_arg: bool, key_arg: str | None) -> tuple[bool, str]:
@@ -179,12 +204,16 @@ def main():
     interactive = args.name is None
 
     knowledge = build_default_knowledge()
-    ef_path = get_default_ef_path()
-    if ef_path.exists():
+    ef_path = locate_ef_file()
+    if ef_path:
         knowledge.update(load_ef_excel(str(ef_path)))
-        print(f"[INFO] EF 엑셀 로딩 완료(고정파일명): {ef_path}")
+        print(f"[INFO] EF 엑셀 로딩 완료(파일명={DEFAULT_EF_FILENAME}): {ef_path}")
     else:
-        print(f"[INFO] {DEFAULT_EF_FILENAME} 파일이 없어 기본 샘플 지식으로 실행합니다.")
+        print(
+            f"[WARN] {DEFAULT_EF_FILENAME} 파일을 찾지 못했습니다. "
+            "검색 위치: 현재 폴더, 실행파일 폴더, 실행파일 상위 폴더"
+        )
+        print("[INFO] 기본 샘플 지식으로 실행합니다.")
 
     use_ai, gemini_key = resolve_ai_mode(interactive, args.use_ai, args.gemini_api_key)
     ai = gemini_assist_from_api_key(gemini_key, args.gemini_model) if use_ai else None

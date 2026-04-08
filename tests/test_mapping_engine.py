@@ -62,7 +62,7 @@ class MappingEngineTest(unittest.TestCase):
     def test_required_uploads(self):
         self.assertIn("gemini_api_key", required_uploads("ai_connection"))
         self.assertIn(
-            "emission_factor.xlsx(Activity Name, Geography, Reference Product Name, Reference Product Unit)",
+            "emission_factor.xlsx|csv(Activity Name, Geography, Reference Product Name, Reference Product Unit)",
             required_uploads("knowledge_bootstrap"),
         )
         self.assertIn("approved_mapping_registry.xlsx", required_uploads("go_live"))

@@ -18,12 +18,13 @@ from pathlib import Path
 from pprint import pprint
 from urllib import error, request
 
-from mapping_engine import MappingEngine, load_ef_excel
+from mapping_engine import MappingEngine, load_ef_file
 
 # Optional direct key input (not recommended for production).
 # If you want, you can write your key here.
 DEMO_GEMINI_API_KEY = ""
-DEFAULT_EF_FILENAME = "emission_factor.xlsx"
+DEFAULT_EF_BASENAME = "emission_factor"
+DEFAULT_EF_FILENAMES = ("emission_factor.xlsx", "emission_factor.csv")
 
 
 def build_default_knowledge():
@@ -152,11 +153,16 @@ def _get_base_dir() -> Path:
 
 
 def get_ef_search_paths() -> list[Path]:
-    return [
-        Path.cwd() / DEFAULT_EF_FILENAME,
-        _get_base_dir() / DEFAULT_EF_FILENAME,
-        _get_base_dir().parent / DEFAULT_EF_FILENAME,
-    ]
+    candidates: list[Path] = []
+    for name in DEFAULT_EF_FILENAMES:
+        candidates.extend(
+            [
+                Path.cwd() / name,
+                _get_base_dir() / name,
+                _get_base_dir().parent / name,
+            ]
+        )
+    return candidates
 
 
 def locate_ef_file() -> Path | None:
@@ -184,7 +190,7 @@ def load_fixed_ef_knowledge(knowledge: dict) -> dict:
     """Load fixed-name EF file in strict mode. Raises on any issue."""
     ef_path = locate_ef_file()
     if not ef_path:
-        lines = [f"{DEFAULT_EF_FILENAME} 파일을 찾지 못했습니다.", "검색 경로:"]
+        lines = [f"{DEFAULT_EF_BASENAME}.xlsx 또는 {DEFAULT_EF_BASENAME}.csv 파일을 찾지 못했습니다.", "검색 경로:"]
         lines.extend([f"  - {p}" for p in get_ef_search_paths()])
         hints = _list_excel_hints()
         if hints:
@@ -193,8 +199,8 @@ def load_fixed_ef_knowledge(knowledge: dict) -> dict:
         raise FileNotFoundError("\n".join(lines))
 
     try:
-        knowledge.update(load_ef_excel(str(ef_path)))
-        print(f"[INFO] EF 엑셀 로딩 완료(파일명={DEFAULT_EF_FILENAME}): {ef_path}")
+        knowledge.update(load_ef_file(str(ef_path)))
+        print(f"[INFO] EF 파일 로딩 완료: {ef_path}")
         return knowledge
     except Exception as exc:
         raise RuntimeError(

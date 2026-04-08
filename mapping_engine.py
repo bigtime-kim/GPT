@@ -8,6 +8,7 @@ This module demonstrates the architecture split:
 
 from __future__ import annotations
 
+import csv
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -249,8 +250,40 @@ class MappingEngine:
         )
 
 
+def _build_ef_knowledge_from_rows(rows: List[Dict[str, str]]) -> Dict[str, Dict[str, str]]:
+    ef_rows: Dict[str, str] = {}
+    ef_records: List[Dict[str, str]] = []
+
+    for rec in rows:
+        activity = str(rec.get("Activity Name", "") or "").strip().lower()
+        geography = str(rec.get("Geography", "") or "").strip().lower()
+        ref_name = str(rec.get("Reference Product Name", "") or "").strip()
+        ref_unit = str(rec.get("Reference Product Unit", "") or "").strip().lower()
+
+        if not activity:
+            continue
+
+        dataset_value = f"{ref_name} [{ref_unit}] ({geography or 'unspecified geo'})"
+        key = f"{activity}|{geography}|{ref_unit}"
+        ef_rows[key] = dataset_value
+
+        key_no_unit = f"{activity}|{geography}|"
+        ef_rows.setdefault(key_no_unit, dataset_value)
+
+        ef_records.append(
+            {
+                "activity": activity,
+                "geography": geography,
+                "unit": ref_unit,
+                "dataset": dataset_value,
+            }
+        )
+
+    return {"ef_rows": ef_rows, "ef_records": ef_records}
+
+
 def load_ef_excel(path: str) -> Dict[str, Dict[str, str]]:
-    """Load emission factor rows from Excel with required columns."""
+    """Load emission factor rows from .xlsx with required columns."""
 
     try:
         from openpyxl import load_workbook
@@ -279,34 +312,46 @@ def load_ef_excel(path: str) -> Dict[str, Dict[str, str]]:
 
     index = {name: header.index(name) for name in REQUIRED_EF_COLUMNS}
 
-    ef_rows: Dict[str, str] = {}
-    ef_records: List[Dict[str, str]] = []
+    table_rows: List[Dict[str, str]] = []
     for row in ws.iter_rows(min_row=2, values_only=True):
-        activity = str(row[index["Activity Name"]] or "").strip().lower()
-        geography = str(row[index["Geography"]] or "").strip().lower()
-        ref_name = str(row[index["Reference Product Name"]] or "").strip()
-        ref_unit = str(row[index["Reference Product Unit"]] or "").strip().lower()
-
-        if not activity:
-            continue
-
-        dataset_value = f"{ref_name} [{ref_unit}] ({geography or 'unspecified geo'})"
-        key = f"{activity}|{geography}|{ref_unit}"
-        ef_rows[key] = dataset_value
-
-        key_no_unit = f"{activity}|{geography}|"
-        ef_rows.setdefault(key_no_unit, dataset_value)
-
-        ef_records.append(
+        table_rows.append(
             {
-                "activity": activity,
-                "geography": geography,
-                "unit": ref_unit,
-                "dataset": dataset_value,
+                "Activity Name": str(row[index["Activity Name"]] or ""),
+                "Geography": str(row[index["Geography"]] or ""),
+                "Reference Product Name": str(row[index["Reference Product Name"]] or ""),
+                "Reference Product Unit": str(row[index["Reference Product Unit"]] or ""),
             }
         )
 
-    return {"ef_rows": ef_rows, "ef_records": ef_records}
+    return _build_ef_knowledge_from_rows(table_rows)
+
+
+def load_ef_csv(path: str) -> Dict[str, Dict[str, str]]:
+    """Load emission factor rows from .csv with required columns."""
+    # try UTF-8 first, then cp949 for common Korean Windows CSV encoding
+    errors = []
+    for enc in ("utf-8-sig", "cp949"):
+        try:
+            with open(path, "r", encoding=enc, newline="") as f:
+                reader = csv.DictReader(f)
+                if not reader.fieldnames:
+                    raise ValueError("CSV header not found")
+                missing = [c for c in REQUIRED_EF_COLUMNS if c not in reader.fieldnames]
+                if missing:
+                    raise ValueError(f"Missing required columns: {missing}")
+                rows = [r for r in reader]
+                return _build_ef_knowledge_from_rows(rows)
+        except Exception as exc:
+            errors.append(f"{enc}: {exc}")
+    raise ValueError("CSV read failed. " + " | ".join(errors))
+
+
+def load_ef_file(path: str) -> Dict[str, Dict[str, str]]:
+    """Load EF data from .xlsx or .csv path."""
+    suffix = Path(path).suffix.lower()
+    if suffix == ".csv":
+        return load_ef_csv(path)
+    return load_ef_excel(path)
 
 
 def required_uploads(stage: str) -> List[str]:
@@ -316,7 +361,7 @@ def required_uploads(stage: str) -> List[str]:
         return ["gemini_api_key", "gemini_model", "rate_limit_policy"]
     if stage == "knowledge_bootstrap":
         return [
-            "emission_factor.xlsx(Activity Name, Geography, Reference Product Name, Reference Product Unit)",
+            "emission_factor.xlsx|csv(Activity Name, Geography, Reference Product Name, Reference Product Unit)",
             "synonym_abbreviation.xlsx",
             "material_ontology.xlsx",
             "spec_alloy_master.xlsx",

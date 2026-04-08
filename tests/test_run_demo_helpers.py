@@ -24,8 +24,10 @@ class RunDemoHelperTest(unittest.TestCase):
 
     def test_get_ef_search_paths(self):
         paths = get_ef_search_paths()
-        self.assertGreaterEqual(len(paths), 3)
-        self.assertTrue(all(p.name == "emission_factor.xlsx" for p in paths))
+        self.assertGreaterEqual(len(paths), 6)
+        names = {p.name for p in paths}
+        self.assertIn("emission_factor.xlsx", names)
+        self.assertIn("emission_factor.csv", names)
 
     def test_locate_ef_file_finds_in_cwd(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -42,7 +44,7 @@ class RunDemoHelperTest(unittest.TestCase):
 
     def test_load_fixed_ef_knowledge_raises_on_error(self):
         with patch("run_demo.locate_ef_file", return_value=Path("dummy.xlsx")), patch(
-            "run_demo.load_ef_excel", side_effect=RuntimeError("boom")
+            "run_demo.load_ef_file", side_effect=RuntimeError("boom")
         ):
             with self.assertRaises(RuntimeError):
                 load_fixed_ef_knowledge({"db_catalog": {}})

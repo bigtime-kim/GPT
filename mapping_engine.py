@@ -301,29 +301,32 @@ def load_ef_excel(path: str) -> Dict[str, Dict[str, str]]:
 
     xlsx_path = Path(path)
     wb = load_workbook(xlsx_path, read_only=True, data_only=True)
-    ws = wb.active
+    try:
+        ws = wb.active
 
-    rows = ws.iter_rows(min_row=1, max_row=1, values_only=True)
-    header = [str(col).strip() if col is not None else "" for col in next(rows)]
+        rows = ws.iter_rows(min_row=1, max_row=1, values_only=True)
+        header = [str(col).strip() if col is not None else "" for col in next(rows)]
 
-    missing = [c for c in REQUIRED_EF_COLUMNS if c not in header]
-    if missing:
-        raise ValueError(f"Missing required columns: {missing}")
+        missing = [c for c in REQUIRED_EF_COLUMNS if c not in header]
+        if missing:
+            raise ValueError(f"Missing required columns: {missing}")
 
-    index = {name: header.index(name) for name in REQUIRED_EF_COLUMNS}
+        index = {name: header.index(name) for name in REQUIRED_EF_COLUMNS}
 
-    table_rows: List[Dict[str, str]] = []
-    for row in ws.iter_rows(min_row=2, values_only=True):
-        table_rows.append(
-            {
-                "Activity Name": str(row[index["Activity Name"]] or ""),
-                "Geography": str(row[index["Geography"]] or ""),
-                "Reference Product Name": str(row[index["Reference Product Name"]] or ""),
-                "Reference Product Unit": str(row[index["Reference Product Unit"]] or ""),
-            }
-        )
+        table_rows: List[Dict[str, str]] = []
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            table_rows.append(
+                {
+                    "Activity Name": str(row[index["Activity Name"]] or ""),
+                    "Geography": str(row[index["Geography"]] or ""),
+                    "Reference Product Name": str(row[index["Reference Product Name"]] or ""),
+                    "Reference Product Unit": str(row[index["Reference Product Unit"]] or ""),
+                }
+            )
 
-    return _build_ef_knowledge_from_rows(table_rows)
+        return _build_ef_knowledge_from_rows(table_rows)
+    finally:
+        wb.close()
 
 
 def load_ef_csv(path: str) -> Dict[str, Dict[str, str]]:

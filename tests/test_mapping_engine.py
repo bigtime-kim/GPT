@@ -80,6 +80,7 @@ class MappingEngineTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "ef.xlsx"
             wb.save(path)
+            wb.close()
 
             ef_knowledge = load_ef_excel(str(path))
             merged = dict(self.knowledge)

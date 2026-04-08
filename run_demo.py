@@ -203,9 +203,23 @@ def load_fixed_ef_knowledge(knowledge: dict) -> dict:
         print(f"[INFO] EF 엑셀 로딩 완료(파일명={DEFAULT_EF_FILENAME}): {ef_path}")
     except Exception as exc:  # keep demo alive in exe environments
         print(f"[WARN] EF 엑셀 로딩 실패: {exc}\n[HINT] .xlsx 로딩에는 openpyxl이 필요합니다. `pip install openpyxl`")
+        print(f"[HINT] 현재 python: {sys.executable}")
+        print("[HINT] exe 사용 중이면 PyInstaller 빌드 시 openpyxl 포함 필요: pyinstaller --onefile run_demo.py --collect-all openpyxl")
         print("[INFO] 기본 샘플 지식으로 계속 실행합니다.")
 
     return knowledge
+
+
+
+def print_runtime_diagnostics() -> None:
+    print("[DIAG] python executable:", sys.executable)
+    print("[DIAG] base dir:", _get_base_dir())
+    try:
+        import openpyxl  # type: ignore
+
+        print("[DIAG] openpyxl version:", openpyxl.__version__)
+    except Exception as exc:
+        print("[DIAG] openpyxl import failed:", exc)
 
 
 def resolve_ai_mode(interactive: bool, use_ai_arg: bool, key_arg: str | None) -> tuple[bool, str]:
@@ -235,9 +249,13 @@ def run() -> int:
     parser.add_argument("--use-ai", action="store_true", help="Enable AI fallback for unresolved names")
     parser.add_argument("--gemini-model", default="gemini-2.0-flash", help="Gemini model name")
     parser.add_argument("--gemini-api-key", help="Optional Gemini key override. Prefer GEMINI_API_KEY env var.")
+    parser.add_argument("--diag", action="store_true", help="Print runtime diagnostics (python path, openpyxl import)")
     args = parser.parse_args()
 
     interactive = args.name is None
+
+    if args.diag:
+        print_runtime_diagnostics()
 
     knowledge = build_default_knowledge()
     knowledge = load_fixed_ef_knowledge(knowledge)

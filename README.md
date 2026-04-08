@@ -8,39 +8,36 @@
 
 ---
 
-## 지금 로그 기준 원인 (당신 케이스)
-로그에 아래 문구가 나왔습니다.
-- `openpyxl is required to read .xlsx files`
+## 당신 로그 기준 현재 상태
+- `python run_demo.py --name "VMQ"` 는 정상 동작 (엑셀 로딩 성공)
+- 그런데 다른 실행(주로 exe)에서 `openpyxl is required...` 경고 발생
 
-즉 파일을 못 찾은 게 아니라, **xlsx 읽기 라이브러리가 없어서 로딩 실패**한 상태입니다.
-
-해결:
-```powershell
-python -m pip install -r requirements.txt
-# 또는
-python -m pip install openpyxl
-```
-
-설치 확인:
-```powershell
-python -c "import openpyxl; print(openpyxl.__version__)"
-```
+이 경우는 보통 **실행 환경이 다르기 때문**입니다.
+(예: Python 실행은 openpyxl 있음 / exe 빌드는 openpyxl 미포함)
 
 ---
 
-## Windows PowerShell에서 명령 연결 주의
-PowerShell 5.x에서는 `&&`가 안 될 수 있습니다.
-아래처럼 줄바꿈으로 실행하세요.
-
+## 빠른 진단
 ```powershell
-git add run_demo.py README.md tests/test_run_demo_helpers.py
-git commit -m "Add EF search-path diagnostics and nearby file hints"
+python run_demo.py --diag --name "VMQ"
 ```
 
-또는 세미콜론 사용:
+출력에서 확인:
+- `[DIAG] python executable:`
+- `[DIAG] openpyxl version:`
+
+exe에서도 같은 진단이 필요하면 exe 실행 시 `--diag`를 붙여 실행하세요.
+
+---
+
+## exe에서만 실패할 때 (중요)
+PyInstaller 빌드 시 openpyxl을 포함해서 다시 빌드하세요.
+
 ```powershell
-git add run_demo.py README.md tests/test_run_demo_helpers.py; git commit -m "..."
+pyinstaller --onefile run_demo.py --collect-all openpyxl
 ```
+
+그 후 `dist\run_demo.exe --diag` 로 확인.
 
 ---
 
@@ -54,8 +51,6 @@ git add run_demo.py README.md tests/test_run_demo_helpers.py; git commit -m "...
 - 검색한 경로들
 - 주변에서 발견된 `*.xls*` 파일 목록
 
-이 출력으로 파일명을 바로 비교하면 원인을 찾을 수 있습니다.
-
 ---
 
 ## 파일 탐색 순서
@@ -64,19 +59,11 @@ git add run_demo.py README.md tests/test_run_demo_helpers.py; git commit -m "...
 2. 실행 파일(또는 스크립트) 폴더
 3. 실행 파일(또는 스크립트) 상위 폴더
 
-즉, exe를 `dist`에서 실행한다면
-- `dist/emission_factor.xlsx` 또는
-- 프로젝트 루트(`dist`의 상위 폴더)에 파일을 두면 인식됩니다.
-
 ---
 
 ## 실행
 ```powershell
 python run_demo.py
-```
-
-자동화 실행:
-```powershell
 python run_demo.py --name "VMQ" --geo KR --unit kg --use-ai
 ```
 
@@ -99,7 +86,6 @@ python run_demo.py --name "VMQ" --geo KR --unit kg --use-ai
 - 키 입력
 
 ### 방법 B) 환경변수 (권장)
-#### Windows PowerShell
 ```powershell
 $env:GEMINI_API_KEY="your_gemini_api_key"
 python run_demo.py --use-ai --name "Thermiga 80127"

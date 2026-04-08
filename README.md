@@ -8,11 +8,11 @@
 이 버전은 **구현 강제 모드(Strict)** 입니다.
 - Excel 파일 누락/로딩 실패 시 즉시 에러
 - Gemini 키 누락 시 즉시 에러
-- “넘어가기” 없이 필수 요소가 준비되어야 실행됩니다.
+- 다만 `openpyxl`이 없으면 **실행 중 자동 설치 1회 시도** 후 계속 진행합니다.
 
 ---
 
-## 실행 전 필수
+## 실행 전 권장
 ```powershell
 python -m pip install -r requirements.txt
 $env:GEMINI_API_KEY="your_key"
@@ -32,13 +32,23 @@ python run_demo.py --name "VMQ"
 
 ---
 
+## openpyxl 관련
+- 없으면 코드가 자동으로 `python -m pip install openpyxl` 1회 시도
+- 네트워크/권한 문제로 실패하면 아래 수동 실행:
+
+```powershell
+"C:\Users\shk23\AppData\Local\Programs\Python\Python312\python.exe" -m pip install openpyxl
+```
+
+---
+
 ## Gemini Bad Request 대응
 진단:
 ```powershell
 python run_demo.py --diag --name "VMQ"
 ```
 
-실패 시 먼저 모델/키 확인:
+실패 시 모델/키 확인:
 ```powershell
 python run_demo.py --name "VMQ" --gemini-model "gemini-2.0-flash"
 ```

@@ -11,6 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from pathlib import Path
+import subprocess
+import sys
 from typing import Callable, Dict, List, Optional
 
 
@@ -253,7 +255,16 @@ def load_ef_excel(path: str) -> Dict[str, Dict[str, str]]:
     try:
         from openpyxl import load_workbook
     except ImportError as exc:
-        raise ImportError("openpyxl is required to read .xlsx files. Install with `pip install openpyxl`.") from exc
+        # Auto-heal path for non-developer users: attempt one-time install.
+        install_cmd = [sys.executable, "-m", "pip", "install", "openpyxl"]
+        subprocess.run(install_cmd, check=False)
+        try:
+            from openpyxl import load_workbook
+        except ImportError as retry_exc:
+            raise ImportError(
+                "openpyxl is required to read .xlsx files. "
+                f"Install with `{sys.executable} -m pip install openpyxl`."
+            ) from retry_exc
 
     xlsx_path = Path(path)
     wb = load_workbook(xlsx_path, read_only=True, data_only=True)

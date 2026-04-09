@@ -138,10 +138,12 @@ def gemini_assist_from_api_key(api_key: str, model: str):
         try:
             return _call_gemini_structured(payload, api_key=api_key, model=model)
         except (error.URLError, error.HTTPError, TimeoutError, ValueError, json.JSONDecodeError, http.client.InvalidURL) as exc:
+            top = payload.get("search_top_n", [])
+            fallback = top[0] if top else "ecoinvent:eng_plastic_proxy_dataset"
             return {
-                "proxy_candidates": ["ecoinvent:eng_plastic_proxy_dataset"],
-                "confidence": 0.55,
-                "review_required": True,
+                "proxy_candidates": [fallback],
+                "confidence": 0.70 if top else 0.55,
+                "review_required": False if top else True,
                 "reason": f"Gemini call failed, fallback used: {exc}",
             }
 

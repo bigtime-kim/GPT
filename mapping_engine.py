@@ -195,25 +195,8 @@ class MappingEngine:
             reason = f"Deterministic {status} candidate generated"
             selected = candidates[0]
 
-            # AI re-interpretation/reranking stage (if available), even after deterministic hit.
-            if self.ai_assist:
-                ai_request = {
-                    "raw_name": raw_name,
-                    "source_type": source_type,
-                    "normalized_name": normalized,
-                    "canonical_hint": canonical,
-                    "geography_hint": geography_hint,
-                    "unit_hint": unit_hint,
-                    "search_top_n": candidates[:3],
-                }
-                ai_response = self.ai_assist(ai_request)
-                trace.append("ai_assist_called=true")
-                ai_candidates = ai_response.get("proxy_candidates", [])
-                if ai_candidates:
-                    selected = ai_candidates[0]
-                    confidence = float(ai_response.get("confidence", confidence))
-                    review_required = ai_response.get("review_required", review_required)
-                    reason = ai_response.get("reason", reason)
+            # Deterministic hit is final to avoid unnecessary AI traffic and quota burn.
+            trace.append("ai_assist_called=false")
 
             return MappingResult(status, selected, confidence, review_required, reason, trace)
 

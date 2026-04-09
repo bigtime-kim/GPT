@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from mapping_engine import MappingEngine
 from run_demo import (
     _extract_json_object,
     get_ef_search_paths,
@@ -15,6 +16,13 @@ from run_demo import (
 
 
 class RunDemoHelperTest(unittest.TestCase):
+    def test_build_default_knowledge_maps_pp_without_ai(self):
+        knowledge = build_default_knowledge()
+        engine = MappingEngine(knowledge)
+        result = engine.map_activity("PP")
+        self.assertEqual(result.selected_dataset, "ecoinvent:eng_plastic_proxy_dataset")
+        self.assertIn("canonical=polypropylene", result.trace_log)
+
     def test_extract_json_object_plain(self):
         parsed = _extract_json_object('{"confidence":0.9,"proxy_candidates":["a"]}')
         self.assertEqual(parsed["confidence"], 0.9)

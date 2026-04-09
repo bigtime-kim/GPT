@@ -31,7 +31,12 @@ DEFAULT_EF_FILENAMES = ("emission_factor.xlsx", "emission_factor.csv")
 
 def build_default_knowledge():
     return {
-        "abbreviation": {"vmq": "silicone rubber family"},
+        "synonym": {
+            "en aw 6005a t6": "wrought aluminium extrusion family",
+            "pp": "polypropylene",
+            "pe": "polyethylene",
+            "pet": "polyethylene terephthalate",
+        },
         "synonym": {"en aw 6005a t6": "wrought aluminium extrusion family"},
         "family": {
             "silicone rubber family": "silicone rubber",

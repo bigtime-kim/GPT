@@ -10,17 +10,21 @@ You can still pass arguments for automation:
 from __future__ import annotations
 
 import argparse
-import json
 import os
-import re
 import sys
 import traceback
 from pathlib import Path
 from pprint import pprint
-from urllib import error, request
-import http.client
 
+from ai_resolver import (
+    AIResolver,
+    _call_gemini_structured as _ai_call_gemini_structured,
+    _extract_json_object as _ai_extract_json_object,
+    normalize_gemini_key as _ai_normalize_gemini_key,
+)
 from mapping_engine import MappingEngine, load_ef_file
+from pipeline import MappingPipeline
+from registry import MappingRegistry
 
 # Optional direct key input (not recommended for production).
 # If you want, you can write your key here.
@@ -37,102 +41,11 @@ def build_default_knowledge():
             "pe": "polyethylene",
             "pet": "polyethylene terephthalate",
         },
-        "synonym": {"en aw 6005a t6": "wrought aluminium extrusion family"},
-        "family": {
-            "silicone rubber family": "silicone rubber",
-            "wrought aluminium extrusion family": "wrought aluminium extrusion family",
-        },
-        "proxy": {"pbt/pom": "engineering plastic"},
-        "db_catalog": {
-            "silicone rubber": "ecoinvent:silicone_rubber_dataset",
-            "wrought aluminium extrusion family": "ecoinvent:alu_extrusion_dataset",
-            "engineering plastic": "ecoinvent:eng_plastic_proxy_dataset",
-        },
-    }
+    return _ai_extract_json_object(text)
 
-
-def _extract_json_object(text: str) -> dict:
-    text = text.strip()
-
-    if text.startswith("```"):
-        text = text.strip("`")
-        if text.lower().startswith("json"):
-            text = text[4:].strip()
-
-    start = text.find("{")
-    end = text.rfind("}")
-    if start == -1 or end == -1 or end <= start:
-        raise ValueError("No JSON object found in model output")
-
-    return json.loads(text[start : end + 1])
-
-
-def _call_gemini_structured(payload: dict, api_key: str, model: str, timeout: int = 20) -> dict:
-    endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-
-    prompt = {
-        "instruction": (
-            "Return only JSON with keys: "
-            "name_type, canonical_form, category, state, function_hint, decomposition_suggestion, "
-            "proxy_candidates, confidence, review_required, reason"
-        ),
-        "input": payload,
-    }
-
-    body = {
-        "contents": [
-            {
-                "role": "user",
-                "parts": [{"text": json.dumps(prompt, ensure_ascii=False)}],
-            }
-        ],
-        "generationConfig": {
-            "temperature": 0.1
-        },
-    }
-
-    req = request.Request(
-        endpoint,
-        data=json.dumps(body).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-
-    with request.urlopen(req, timeout=timeout) as resp:
-        response_json = json.loads(resp.read().decode("utf-8"))
-
-    candidates = response_json.get("candidates", [])
-    if not candidates:
-        raise ValueError("Gemini returned no candidates")
-
-    parts = candidates[0].get("content", {}).get("parts", [])
-    if not parts:
-        raise ValueError("Gemini returned empty parts")
-
-    text = "".join(part.get("text", "") for part in parts)
-    parsed = _extract_json_object(text)
-
-    return {
-        "name_type": parsed.get("name_type", "material"),
-        "canonical_form": parsed.get("canonical_form", payload.get("canonical_hint", "")),
-        "category": parsed.get("category", "material"),
-        "state": parsed.get("state", ""),
-        "function_hint": parsed.get("function_hint", ""),
-        "decomposition_suggestion": parsed.get("decomposition_suggestion", []),
-        "proxy_candidates": parsed.get("proxy_candidates", []),
-        "confidence": float(parsed.get("confidence", 0.0)),
-        "review_required": bool(parsed.get("review_required", True)),
-        "reason": parsed.get("reason", "Gemini response"),
-    }
-
-
-def gemini_assist_from_api_key(api_key: str, model: str):
-    """Real Gemini integration with safe fallback."""
-
-    def _ai(payload):
-        if not api_key:
-            top = payload.get("search_top_n", [])
-            fallback = top[0] if top else "ecoinvent:eng_plastic_proxy_dataset"
+    return _ai_call_gemini_structured(payload, api_key=api_key, model=model, timeout=timeout)
+    resolver = AIResolver(api_key=api_key, model=model)
+    return resolver.resolve
             return {
                 "proxy_candidates": [fallback],
                 "confidence": 0.80,
@@ -248,16 +161,7 @@ def resolve_ai_mode(interactive: bool, disable_ai_arg: bool, key_arg: str | None
 
 def normalize_gemini_key(raw: str) -> str:
     """Sanitize pasted key and keep first valid Gemini key token if present."""
-    if not raw:
-        return ""
-    text = raw.strip().replace("\x00", "").replace("\x01", "")
-    # remove whitespace/control chars
-    text = "".join(ch for ch in text if ch.isprintable() and not ch.isspace())
-    # common Gemini key pattern starts with AIza
-    m = re.search(r"AIza[A-Za-z0-9_-]{20,}", text)
-    if m:
-        return m.group(0)
-    return text
+    return _ai_normalize_gemini_key(raw)
 
 
 def run() -> int:
@@ -280,16 +184,17 @@ def run() -> int:
     knowledge = load_fixed_ef_knowledge(knowledge)
 
     use_ai, gemini_key = resolve_ai_mode(interactive, args.no_ai, args.gemini_api_key)
-    ai = gemini_assist_from_api_key(gemini_key, args.gemini_model) if use_ai else None
-
-    engine = MappingEngine(knowledge, ai_assist=ai)
+    registry = MappingRegistry()
+    ai_resolver = AIResolver(gemini_key, args.gemini_model, registry=registry) if use_ai else None
+    engine = MappingEngine(knowledge, ai_assist=None)
+    pipeline = MappingPipeline(engine=engine, ai_resolver=ai_resolver, registry=registry)
 
     print("=== Mapping Demo ===")
     activity_name = args.name if args.name else input("물질/활동명 입력: ").strip()
     geography = args.geo if args.geo else (input("Geography (optional): ").strip() if interactive else "")
     unit = args.unit if args.unit else (input("Unit (optional): ").strip() if interactive else "")
 
-    result = engine.map_activity(activity_name, geography_hint=geography, unit_hint=unit)
+    result = pipeline.map_activity(activity_name, geography_hint=geography, unit_hint=unit)
 
     print("\n=== Result ===")
     pprint(result)

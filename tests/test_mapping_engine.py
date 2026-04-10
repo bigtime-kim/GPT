@@ -4,6 +4,8 @@ import unittest
 from pathlib import Path
 
 from mapping_engine import MappingEngine, load_ef_excel, required_uploads
+from pipeline import MappingPipeline
+from registry import MappingRegistry
 
 
 class MappingEngineTest(unittest.TestCase):
@@ -90,6 +92,29 @@ class MappingEngineTest(unittest.TestCase):
             result = engine.map_activity("electricity, medium voltage", geography_hint="KR", unit_hint="kWh")
             self.assertEqual(result.status, "exact")
             self.assertIn("(kr)", result.selected_dataset.lower())
+
+    def test_pipeline_gate_skips_ai_for_high_conf_deterministic(self):
+        calls = {"count": 0}
+
+        class DummyAI:
+            def resolve(self, _payload):
+                calls["count"] += 1
+                return {
+                    "proxy_candidates": ["ecoinvent:eng_plastic_proxy_dataset"],
+                    "confidence": 0.6,
+                    "review_required": True,
+                    "reason": "should not be called",
+                }
+
+        pipeline = MappingPipeline(
+            engine=MappingEngine(self.knowledge),
+            ai_resolver=DummyAI(),
+            registry=MappingRegistry(),
+            ai_threshold=0.8,
+        )
+        result = pipeline.map_activity("EN AW 6005A T6")
+        self.assertEqual(calls["count"], 0)
+        self.assertEqual(result.selected_dataset, "ecoinvent:alu_extrusion_dataset")
 
 
 if __name__ == "__main__":

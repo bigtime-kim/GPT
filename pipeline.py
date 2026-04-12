@@ -50,12 +50,13 @@ class MappingPipeline:
                     trace_log=["memo_hit=true", "ai_assist_called=false"],
                 )
 
-        deterministic = self.engine.map_activity(
+        ctx = self.engine.analyze_activity(
             raw_name=raw_name,
             source_type=source_type,
             geography_hint=geography_hint,
             unit_hint=unit_hint,
         )
+        deterministic = ctx.result
 
         has_candidate = deterministic.selected_dataset is not None
         if has_candidate and deterministic.confidence >= self.ai_threshold:
@@ -66,22 +67,18 @@ class MappingPipeline:
         if not self.ai_resolver:
             return deterministic
 
-        normalized = self.engine.preprocess(raw_name)
-        name_type = self.engine.classify_name_type(normalized)
-        canonical = self.engine.canonicalize(normalized, name_type)
-        candidates = self.engine.generate_candidates(canonical, geography_hint, unit_hint)
-
         payload = {
             "raw_name": raw_name,
             "source_type": source_type,
-            "normalized_name": normalized,
-            "canonical_hint": canonical,
+            "normalized_name": ctx.normalized_name,
+            "canonical_hint": ctx.canonical_form,
             "geography_hint": geography_hint,
             "unit_hint": unit_hint,
-            "search_top_n": candidates[:3],
+            "search_top_n": ctx.candidates[:3],
             "deterministic_confidence": deterministic.confidence,
         }
         ai_response = self.ai_resolver.resolve(payload)
+        ai_source = str(ai_response.get("source", "gemini_live"))
         proxy_candidates = ai_response.get("proxy_candidates", [])
         ai_selected = proxy_candidates[0] if proxy_candidates else None
         ai_confidence = float(ai_response.get("confidence", 0.0))
@@ -99,7 +96,8 @@ class MappingPipeline:
             return replace(
                 deterministic,
                 reason=f"{deterministic.reason} | AI consulted but deterministic kept",
-                trace_log=deterministic.trace_log + ["decision_gate=ai_consulted_keep_deterministic", "ai_assist_called=true"],
+                trace_log=deterministic.trace_log
+                + ["decision_gate=ai_consulted_keep_deterministic", "ai_assist_called=true", f"ai_source={ai_source}"],
             )
 
         return replace(
@@ -108,5 +106,5 @@ class MappingPipeline:
             confidence=ai_confidence,
             review_required=ai_review_required,
             reason=str(ai_response.get("reason", deterministic.reason)),
-            trace_log=deterministic.trace_log + ["decision_gate=ai_needed", "ai_assist_called=true"],
+            trace_log=deterministic.trace_log + ["decision_gate=ai_needed", "ai_assist_called=true", f"ai_source={ai_source}"],
         )

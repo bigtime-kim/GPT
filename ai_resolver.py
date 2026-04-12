@@ -119,10 +119,13 @@ class AIResolver:
         if self.registry:
             cached = self.registry.get_ai_cache(key)
             if cached is not None:
-                return cached
+                out = dict(cached)
+                out["source"] = "ai_cache"
+                return out
 
         try:
             out = _call_gemini_structured(payload, api_key=self.api_key, model=self.model)
+            out["source"] = "gemini_live"
         except (error.URLError, error.HTTPError, TimeoutError, ValueError, json.JSONDecodeError, http.client.InvalidURL) as exc:
             out = {
                 "proxy_candidates": [fallback],

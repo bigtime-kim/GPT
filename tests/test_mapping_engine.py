@@ -110,6 +110,26 @@ class MappingEngineTest(unittest.TestCase):
         self.assertIsNone(registry.get_approved_mapping("EN AW 6005A T6"))
         self.assertEqual(registry.get_memo_mapping("EN AW 6005A T6"), "ecoinvent:alu_extrusion_dataset")
 
+    def test_pipeline_ai_trace_contains_source(self):
+        class DummyAI:
+            def resolve(self, _payload):
+                return {
+                    "proxy_candidates": ["ecoinvent:eng_plastic_proxy_dataset"],
+                    "confidence": 0.6,
+                    "review_required": True,
+                    "reason": "fallback",
+                    "source": "ai_cache",
+                }
+
+        pipeline = MappingPipeline(
+            engine=MappingEngine(self.knowledge),
+            ai_resolver=DummyAI(),
+            registry=MappingRegistry(),
+            ai_threshold=0.9,
+        )
+        result = pipeline.map_activity("VMQ")
+        self.assertIn("ai_source=ai_cache", result.trace_log)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -54,6 +54,20 @@ class MappingResult:
     trace_log: List[str]
 
 
+@dataclass
+class DeterministicContext:
+    raw_name: str
+    source_type: str
+    geography_hint: str
+    unit_hint: str
+    normalized_name: str
+    name_type: str
+    canonical_form: str
+    candidate_source: str
+    candidates: List[str]
+    result: MappingResult
+
+
 class MappingEngine:
     def __init__(self, knowledge: Dict[str, Dict[str, str]]):
         self.knowledge = knowledge
@@ -200,13 +214,13 @@ class MappingEngine:
 
         return None, "review", 0.0, "none"
 
-    def map_activity(
+    def analyze_activity(
         self,
         raw_name: str,
         source_type: str = "",
         geography_hint: str = "",
         unit_hint: str = "",
-    ) -> MappingResult:
+    ) -> DeterministicContext:
         normalized = self.preprocess(raw_name)
         name_type = self.classify_name_type(normalized)
         canonical = self.canonicalize(normalized, name_type)
@@ -224,7 +238,7 @@ class MappingEngine:
         trace.append("ai_assist_called=false")
         if selected is not None:
             review_required = confidence < AUTO_ACCEPT_THRESHOLD
-            return MappingResult(
+            result = MappingResult(
                 status=status,
                 selected_dataset=selected,
                 confidence=confidence,
@@ -232,8 +246,20 @@ class MappingEngine:
                 reason=f"Deterministic {source} candidate generated",
                 trace_log=trace,
             )
+            return DeterministicContext(
+                raw_name=raw_name,
+                source_type=source_type,
+                geography_hint=geography_hint,
+                unit_hint=unit_hint,
+                normalized_name=normalized,
+                name_type=name_type,
+                canonical_form=canonical,
+                candidate_source=source,
+                candidates=[selected],
+                result=result,
+            )
 
-        return MappingResult(
+        result = MappingResult(
             status="review",
             selected_dataset=None,
             confidence=0.0,
@@ -241,6 +267,32 @@ class MappingEngine:
             reason="No deterministic candidate found",
             trace_log=trace,
         )
+        return DeterministicContext(
+            raw_name=raw_name,
+            source_type=source_type,
+            geography_hint=geography_hint,
+            unit_hint=unit_hint,
+            normalized_name=normalized,
+            name_type=name_type,
+            canonical_form=canonical,
+            candidate_source=source,
+            candidates=[],
+            result=result,
+        )
+
+    def map_activity(
+        self,
+        raw_name: str,
+        source_type: str = "",
+        geography_hint: str = "",
+        unit_hint: str = "",
+    ) -> MappingResult:
+        return self.analyze_activity(
+            raw_name=raw_name,
+            source_type=source_type,
+            geography_hint=geography_hint,
+            unit_hint=unit_hint,
+        ).result
 
 
 def _build_ef_knowledge_from_rows(rows: List[Dict[str, str]]) -> Dict[str, Dict[str, str]]:

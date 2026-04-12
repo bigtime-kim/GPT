@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from ai_resolver import AIResolver
 from mapping_engine import MappingEngine
 from run_demo import (
     _extract_json_object,
@@ -79,6 +80,12 @@ class RunDemoHelperTest(unittest.TestCase):
         normalized = normalize_gemini_key(raw)
         self.assertTrue(normalized.startswith("AIza"))
         self.assertNotIn("\x01", normalized)
+
+    def test_ai_resolver_missing_key_forces_review(self):
+        resolver = AIResolver(api_key="", model="gemini-2.0-flash")
+        out = resolver.resolve({"search_top_n": ["eco:a"]})
+        self.assertTrue(out["review_required"])
+        self.assertEqual(out["source"], "ai_fallback")
 
 
 if __name__ == "__main__":

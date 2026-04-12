@@ -109,9 +109,10 @@ class AIResolver:
         if not self.api_key:
             return {
                 "proxy_candidates": [fallback],
-                "confidence": 0.80 if top else 0.55,
-                "review_required": False if top else True,
-                "reason": "Gemini key not set, using local AI stub",
+                "confidence": 0.0,
+                "review_required": True,
+                "reason": "AI unavailable (missing key), deterministic fallback only",
+                "source": "ai_fallback",
             }
 
         key = self._payload_key(payload)
@@ -125,9 +126,10 @@ class AIResolver:
         except (error.URLError, error.HTTPError, TimeoutError, ValueError, json.JSONDecodeError, http.client.InvalidURL) as exc:
             out = {
                 "proxy_candidates": [fallback],
-                "confidence": 0.70 if top else 0.55,
-                "review_required": False if top else True,
-                "reason": f"Gemini call failed, fallback used: {exc}",
+                "confidence": 0.0,
+                "review_required": True,
+                "reason": f"AI unavailable ({exc}), deterministic fallback only",
+                "source": "ai_fallback",
             }
 
         if self.registry:

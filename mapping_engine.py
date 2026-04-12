@@ -14,7 +14,7 @@ from difflib import SequenceMatcher
 from pathlib import Path
 import subprocess
 import sys
-from typing import Callable, Dict, List, Optional
+from typing import Dict, List, Optional
 
 
 AUTO_ACCEPT_THRESHOLD = 0.9
@@ -55,9 +55,8 @@ class MappingResult:
 
 
 class MappingEngine:
-    def __init__(self, knowledge: Dict[str, Dict[str, str]], ai_assist: Optional[Callable[[Dict], Dict]] = None):
+    def __init__(self, knowledge: Dict[str, Dict[str, str]]):
         self.knowledge = knowledge
-        self.ai_assist = ai_assist
 
     def preprocess(self, name: str) -> str:
         normalized = " ".join(name.strip().lower().replace("/", " /").split())
@@ -159,6 +158,48 @@ class MappingEngine:
 
         return []
 
+    def _resolve_deterministic_candidate(
+        self,
+        canonical_form: str,
+        geography_hint: str = "",
+        unit_hint: str = "",
+    ) -> tuple[Optional[str], str, float, str]:
+        catalog = self.knowledge.get("db_catalog", {})
+        if canonical_form in catalog:
+            return catalog[canonical_form], "exact", 0.98, "catalog_exact"
+
+        families = self.knowledge.get("family", {})
+        if canonical_form in families and families[canonical_form] in catalog:
+            return catalog[families[canonical_form]], "family", 0.85, "family_map"
+
+        proxies = self.knowledge.get("proxy", {})
+        if canonical_form in proxies and proxies[canonical_form] in catalog:
+            return catalog[proxies[canonical_form]], "proxy", 0.7, "proxy_map"
+
+        ef_rows = self.knowledge.get("ef_rows", {})
+        if ef_rows:
+            geo = (geography_hint or "").strip().lower()
+            unit = (unit_hint or "").strip().lower()
+            keys = []
+            if geo:
+                keys.append((f"{canonical_form}|{geo}|{unit}", "ef_exact"))
+                keys.append((f"{canonical_form}|{geo}|", "ef_geo_fallback"))
+            keys.append((f"{canonical_form}|row|{unit}", "ef_geo_fallback"))
+            keys.append((f"{canonical_form}|row|", "ef_geo_fallback"))
+            keys.append((f"{canonical_form}|glo|{unit}", "ef_geo_fallback"))
+            keys.append((f"{canonical_form}|glo|", "ef_geo_fallback"))
+            keys.append((f"{canonical_form}||{unit}", "ef_geo_fallback"))
+            keys.append((f"{canonical_form}||", "ef_geo_fallback"))
+            for key, source in keys:
+                if key in ef_rows:
+                    return ef_rows[key], "exact", 0.95, source
+
+        fuzzy = self._fuzzy_ef_candidate(canonical_form, geography_hint, unit_hint)
+        if fuzzy:
+            return fuzzy, "review", 0.65, "ef_fuzzy"
+
+        return None, "review", 0.0, "none"
+
     def map_activity(
         self,
         raw_name: str,
@@ -178,51 +219,20 @@ class MappingEngine:
             f"unit_hint={unit_hint}",
         ]
 
-        candidates = self.generate_candidates(canonical, geography_hint, unit_hint)
-
-        if candidates:
-            status = "exact"
-            if canonical in self.knowledge.get("family", {}):
-                status = "family"
-            if canonical in self.knowledge.get("proxy", {}):
-                status = "proxy"
-
-            if self.knowledge.get("ef_rows", {}) or self.knowledge.get("ef_records", {}):
-                status = "exact"
-
-            confidence = {"exact": 0.98, "family": 0.85, "proxy": 0.7}[status]
-            review_required = confidence < AUTO_ACCEPT_THRESHOLD
-            reason = f"Deterministic {status} candidate generated"
-            selected = candidates[0]
-
-            # Deterministic hit is final to avoid unnecessary AI traffic and quota burn.
-            trace.append("ai_assist_called=false")
-
-            return MappingResult(status, selected, confidence, review_required, reason, trace)
-
-        # AI assist is intentionally only for unresolved / long-tail cases.
-        if self.ai_assist:
-            ai_request = {
-                "raw_name": raw_name,
-                "source_type": source_type,
-                "normalized_name": normalized,
-                "canonical_hint": canonical,
-                "geography_hint": geography_hint,
-                "unit_hint": unit_hint,
-                "knowledge_hits": [],
-            }
-            ai_response = self.ai_assist(ai_request)
-            trace.append("ai_assist_called=true")
-
-            proxy_candidates = ai_response.get("proxy_candidates", [])
-            confidence = float(ai_response.get("confidence", 0.0))
-            selected = proxy_candidates[0] if proxy_candidates else None
-            review_required = ai_response.get("review_required", True)
-            status = "review" if review_required else "proxy"
-            reason = ai_response.get("reason", "AI assist fallback")
-            return MappingResult(status, selected, confidence, review_required, reason, trace)
-
+        selected, status, confidence, source = self._resolve_deterministic_candidate(canonical, geography_hint, unit_hint)
+        trace.append(f"candidate_source={source}")
         trace.append("ai_assist_called=false")
+        if selected is not None:
+            review_required = confidence < AUTO_ACCEPT_THRESHOLD
+            return MappingResult(
+                status=status,
+                selected_dataset=selected,
+                confidence=confidence,
+                review_required=review_required,
+                reason=f"Deterministic {source} candidate generated",
+                trace_log=trace,
+            )
+
         return MappingResult(
             status="review",
             selected_dataset=None,

@@ -186,7 +186,7 @@ def run() -> int:
     use_ai, gemini_key = resolve_ai_mode(interactive, args.no_ai, args.gemini_api_key)
     registry = MappingRegistry()
     ai_resolver = AIResolver(gemini_key, args.gemini_model, registry=registry) if use_ai else None
-    engine = MappingEngine(knowledge, ai_assist=None)
+    engine = MappingEngine(knowledge)
     pipeline = MappingPipeline(engine=engine, ai_resolver=ai_resolver, registry=registry)
 
     print("=== Mapping Demo ===")

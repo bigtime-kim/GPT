@@ -39,27 +39,12 @@ class MappingEngineTest(unittest.TestCase):
 
         self.assertEqual(result.selected_dataset, "ecoinvent:alu_extrusion_dataset")
 
-    def test_ai_assist_called_only_for_unresolved(self):
-        calls = {"count": 0}
-
-        def fake_ai(_payload):
-            calls["count"] += 1
-            return {
-                "proxy_candidates": ["ecoinvent:eng_plastic_proxy_dataset"],
-                "confidence": 0.62,
-                "review_required": True,
-                "reason": "Long-tail trade name interpreted",
-            }
-
-        engine = MappingEngine(self.knowledge, ai_assist=fake_ai)
-
-        deterministic = engine.map_activity("VMQ")
-        self.assertIn("ai_assist_called=false", deterministic.trace_log)
-
+    def test_unresolved_is_review_without_ai_in_engine(self):
+        engine = MappingEngine(self.knowledge)
         ambiguous = engine.map_activity("Thermiga 80127")
-        self.assertEqual(calls["count"], 1)
         self.assertEqual(ambiguous.status, "review")
-        self.assertEqual(ambiguous.selected_dataset, "ecoinvent:eng_plastic_proxy_dataset")
+        self.assertIsNone(ambiguous.selected_dataset)
+        self.assertIn("candidate_source=none", ambiguous.trace_log)
 
     def test_required_uploads(self):
         self.assertIn("gemini_api_key", required_uploads("ai_connection"))
@@ -92,6 +77,7 @@ class MappingEngineTest(unittest.TestCase):
             result = engine.map_activity("electricity, medium voltage", geography_hint="KR", unit_hint="kWh")
             self.assertEqual(result.status, "exact")
             self.assertIn("(kr)", result.selected_dataset.lower())
+            self.assertIn("candidate_source=ef_exact", result.trace_log)
 
     def test_pipeline_gate_skips_ai_for_high_conf_deterministic(self):
         calls = {"count": 0}
@@ -115,6 +101,14 @@ class MappingEngineTest(unittest.TestCase):
         result = pipeline.map_activity("EN AW 6005A T6")
         self.assertEqual(calls["count"], 0)
         self.assertEqual(result.selected_dataset, "ecoinvent:alu_extrusion_dataset")
+
+    def test_pipeline_uses_memo_not_approved_for_auto_reuse(self):
+        registry = MappingRegistry()
+        pipeline = MappingPipeline(engine=MappingEngine(self.knowledge), ai_resolver=None, registry=registry, ai_threshold=0.8)
+        result = pipeline.map_activity("EN AW 6005A T6")
+        self.assertEqual(result.selected_dataset, "ecoinvent:alu_extrusion_dataset")
+        self.assertIsNone(registry.get_approved_mapping("EN AW 6005A T6"))
+        self.assertEqual(registry.get_memo_mapping("EN AW 6005A T6"), "ecoinvent:alu_extrusion_dataset")
 
 
 if __name__ == "__main__":

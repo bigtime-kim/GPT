@@ -1,0 +1,231 @@
+"""Simple CLI demo for the PCF mapping prototype.
+
+Default interactive flow:
+  python run_demo.py
+
+You can still pass arguments for automation:
+  python run_demo.py --name "VMQ" --geo KR --unit kg --use-ai
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+import traceback
+from pathlib import Path
+from pprint import pprint
+
+from ai_resolver import (
+    AIResolver,
+    _call_gemini_structured as _ai_call_gemini_structured,
+    _extract_json_object as _ai_extract_json_object,
+    normalize_gemini_key as _ai_normalize_gemini_key,
+)
+from mapping_engine import MappingEngine, load_ef_file
+from pipeline import MappingPipeline
+from registry import MappingRegistry
+
+# Optional direct key input (not recommended for production).
+# If you want, you can write your key here.
+DEMO_GEMINI_API_KEY = ""
+DEFAULT_EF_BASENAME = "emission_factor"
+DEFAULT_EF_FILENAMES = ("emission_factor.xlsx", "emission_factor.csv")
+
+
+def build_default_knowledge():
+    return {
+        "synonym": {
+            "en aw 6005a t6": "wrought aluminium extrusion family",
+            "pp": "polypropylene",
+            "pe": "polyethylene",
+            "pet": "polyethylene terephthalate",
+        },
+    return _ai_extract_json_object(text)
+
+    return _ai_call_gemini_structured(payload, api_key=api_key, model=model, timeout=timeout)
+    resolver = AIResolver(api_key=api_key, model=model)
+    return resolver.resolve
+            return {
+                "proxy_candidates": [fallback],
+                "confidence": 0.80,
+                "review_required": False if top else True,
+                "reason": "Gemini key not set, using local AI stub",
+            }
+
+        try:
+            return _call_gemini_structured(payload, api_key=api_key, model=model)
+        except (error.URLError, error.HTTPError, TimeoutError, ValueError, json.JSONDecodeError, http.client.InvalidURL) as exc:
+            top = payload.get("search_top_n", [])
+            fallback = top[0] if top else "ecoinvent:eng_plastic_proxy_dataset"
+            return {
+                "proxy_candidates": [fallback],
+                "confidence": 0.70 if top else 0.55,
+                "review_required": False if top else True,
+                "reason": f"Gemini call failed, fallback used: {exc}",
+            }
+
+    return _ai
+
+
+def _get_base_dir() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent
+
+
+def get_ef_search_paths() -> list[Path]:
+    candidates: list[Path] = []
+    for name in DEFAULT_EF_FILENAMES:
+        candidates.extend(
+            [
+                Path.cwd() / name,
+                _get_base_dir() / name,
+                _get_base_dir().parent / name,
+            ]
+        )
+    return candidates
+
+
+def locate_ef_file() -> Path | None:
+    for path in get_ef_search_paths():
+        if path.exists():
+            return path
+    return None
+
+
+def _list_excel_hints() -> list[str]:
+    """Collect nearby excel files for troubleshooting when fixed filename isn't found."""
+    hints: list[str] = []
+    seen = set()
+    for candidate in get_ef_search_paths():
+        folder = candidate.parent
+        if folder in seen or not folder.exists():
+            continue
+        seen.add(folder)
+        for p in folder.glob("*.xls*"):
+            hints.append(str(p.resolve()))
+    return hints[:10]
+
+
+def load_fixed_ef_knowledge(knowledge: dict) -> dict:
+    """Load fixed-name EF file in strict mode. Raises on any issue."""
+    ef_path = locate_ef_file()
+    if not ef_path:
+        lines = [f"{DEFAULT_EF_BASENAME}.xlsx 또는 {DEFAULT_EF_BASENAME}.csv 파일을 찾지 못했습니다.", "검색 경로:"]
+        lines.extend([f"  - {p}" for p in get_ef_search_paths()])
+        hints = _list_excel_hints()
+        if hints:
+            lines.append("주변 Excel 파일:")
+            lines.extend([f"  - {h}" for h in hints])
+        raise FileNotFoundError("\n".join(lines))
+
+    try:
+        knowledge.update(load_ef_file(str(ef_path)))
+        print(f"[INFO] EF 파일 로딩 완료: {ef_path}")
+        return knowledge
+    except Exception as exc:
+        raise RuntimeError(
+            f"EF 엑셀 로딩 실패: {exc}\n"
+            f"현재 python: {sys.executable}\n"
+            f"이 Python에 설치: '{sys.executable}' -m pip install openpyxl\n"
+            "exe 사용 중이면: pyinstaller --onefile run_demo.py --collect-all openpyxl"
+        ) from exc
+
+
+
+def print_runtime_diagnostics() -> None:
+    print("[DIAG] python executable:", sys.executable)
+    print("[DIAG] base dir:", _get_base_dir())
+    try:
+        import openpyxl  # type: ignore
+
+        print("[DIAG] openpyxl version:", openpyxl.__version__)
+    except Exception as exc:
+        print("[DIAG] openpyxl import failed:", exc)
+
+
+def resolve_ai_mode(interactive: bool, disable_ai_arg: bool, key_arg: str | None) -> tuple[bool, str]:
+    # Deterministic-first runtime. AI is enabled only when key is available.
+    if disable_ai_arg:
+        return False, ""
+
+    key = key_arg or os.getenv("GEMINI_API_KEY", "") or DEMO_GEMINI_API_KEY
+    if interactive and not key:
+        key = input("GEMINI_API_KEY 입력(선택, 엔터 시 deterministic-only 실행): ").strip()
+    key = normalize_gemini_key(key)
+    if not key:
+        print("[WARN] GEMINI_API_KEY 미설정: deterministic-only 모드로 실행합니다.")
+        return False, ""
+    return True, key
+
+
+def _pause_before_exit() -> None:
+    if getattr(sys, "frozen", False) or (sys.stdin and sys.stdin.isatty()):
+        try:
+            input("\n엔터를 누르면 종료됩니다.")
+        except EOFError:
+            pass
+
+
+def normalize_gemini_key(raw: str) -> str:
+    """Sanitize pasted key and keep first valid Gemini key token if present."""
+    return _ai_normalize_gemini_key(raw)
+
+
+def run() -> int:
+    parser = argparse.ArgumentParser(description="Run a mapping demo with sample knowledge + fixed Excel file name")
+    parser.add_argument("--name", help="Activity name to map (if omitted, interactive prompt is used)")
+    parser.add_argument("--geo", default="", help="Geography hint (e.g., KR, US, GLO, RoW)")
+    parser.add_argument("--unit", default="", help="Reference product unit hint (e.g., kg, kWh)")
+    parser.add_argument("--no-ai", action="store_true", help="Disable AI (debug only). Default is AI-first mode")
+    parser.add_argument("--gemini-model", default="gemini-2.0-flash", help="Gemini model name")
+    parser.add_argument("--gemini-api-key", help="Optional Gemini key override. Prefer GEMINI_API_KEY env var.")
+    parser.add_argument("--diag", action="store_true", help="Print runtime diagnostics (python path, openpyxl import)")
+    args = parser.parse_args()
+
+    interactive = args.name is None
+
+    if args.diag:
+        print_runtime_diagnostics()
+
+    knowledge = build_default_knowledge()
+    knowledge = load_fixed_ef_knowledge(knowledge)
+
+    use_ai, gemini_key = resolve_ai_mode(interactive, args.no_ai, args.gemini_api_key)
+    registry = MappingRegistry()
+    ai_resolver = AIResolver(gemini_key, args.gemini_model, registry=registry) if use_ai else None
+    engine = MappingEngine(knowledge)
+    pipeline = MappingPipeline(engine=engine, ai_resolver=ai_resolver, registry=registry)
+
+    print("=== Mapping Demo ===")
+    activity_name = args.name if args.name else input("물질/활동명 입력: ").strip()
+    geography = args.geo if args.geo else (input("Geography (optional): ").strip() if interactive else "")
+    unit = args.unit if args.unit else (input("Unit (optional): ").strip() if interactive else "")
+
+    result = pipeline.map_activity(activity_name, geography_hint=geography, unit_hint=unit)
+
+    print("\n=== Result ===")
+    pprint(result)
+
+    if interactive:
+        _pause_before_exit()
+
+    return 0
+
+
+def main() -> int:
+    try:
+        return run()
+    except KeyboardInterrupt:
+        print("\n[INFO] 사용자 중단")
+        return 130
+    except Exception:
+        print("\n[ERROR] 실행 중 예외가 발생했습니다:")
+        traceback.print_exc()
+        _pause_before_exit()
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

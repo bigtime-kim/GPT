@@ -146,17 +146,26 @@ def print_runtime_diagnostics() -> None:
 
 
 def resolve_ai_mode(interactive: bool, disable_ai_arg: bool, key_arg: str | None) -> tuple[bool, str]:
-    # AI-first mode by default. Use --no-ai only for debugging.
+    # Deterministic-first runtime. AI is enabled only when key is available.
     if disable_ai_arg:
         return False, ""
 
     key = key_arg or os.getenv("GEMINI_API_KEY", "") or DEMO_GEMINI_API_KEY
     if interactive and not key:
-        key = input("GEMINI_API_KEY 입력(필수, 입력값 표시됨): ").strip()
+        key = input("GEMINI_API_KEY 입력(선택, 엔터 시 deterministic-only 실행): ").strip()
     key = normalize_gemini_key(key)
     if not key:
-        raise ValueError("GEMINI_API_KEY is required. Set env var or pass --gemini-api-key. (Use --no-ai only for debug)")
+        print("[WARN] GEMINI_API_KEY 미설정: deterministic-only 모드로 실행합니다.")
+        return False, ""
     return True, key
+
+
+def _pause_before_exit() -> None:
+    if getattr(sys, "frozen", False) or (sys.stdin and sys.stdin.isatty()):
+        try:
+            input("\n엔터를 누르면 종료됩니다.")
+        except EOFError:
+            pass
 
 
 def normalize_gemini_key(raw: str) -> str:
@@ -200,7 +209,7 @@ def run() -> int:
     pprint(result)
 
     if interactive:
-        input("\n엔터를 누르면 종료됩니다.")
+        _pause_before_exit()
 
     return 0
 
@@ -214,8 +223,7 @@ def main() -> int:
     except Exception:
         print("\n[ERROR] 실행 중 예외가 발생했습니다:")
         traceback.print_exc()
-        if sys.stdin and sys.stdin.isatty():
-            input("\n엔터를 누르면 종료됩니다.")
+        _pause_before_exit()
         return 1
 
 

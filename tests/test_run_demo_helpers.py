@@ -17,6 +17,10 @@ from run_demo import (
 
 
 class RunDemoHelperTest(unittest.TestCase):
+    def test_run_demo_exports_helper_functions(self):
+        self.assertTrue(callable(build_default_knowledge))
+        self.assertTrue(callable(_extract_json_object))
+
     def test_build_default_knowledge_maps_pp_without_ai(self):
         knowledge = build_default_knowledge()
         engine = MappingEngine(knowledge)

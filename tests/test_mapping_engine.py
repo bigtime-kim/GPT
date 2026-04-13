@@ -108,7 +108,10 @@ class MappingEngineTest(unittest.TestCase):
         result = pipeline.map_activity("EN AW 6005A T6")
         self.assertEqual(result.selected_dataset, "ecoinvent:alu_extrusion_dataset")
         self.assertIsNone(registry.get_approved_mapping("EN AW 6005A T6"))
-        self.assertEqual(registry.get_memo_mapping("EN AW 6005A T6"), "ecoinvent:alu_extrusion_dataset")
+        self.assertEqual(
+            registry.get_memo_mapping("wrought aluminium extrusion family"),
+            "ecoinvent:alu_extrusion_dataset",
+        )
 
     def test_pipeline_ai_trace_contains_source(self):
         class DummyAI:
@@ -129,6 +132,28 @@ class MappingEngineTest(unittest.TestCase):
         )
         result = pipeline.map_activity("VMQ")
         self.assertIn("ai_source=ai_cache", result.trace_log)
+
+    def test_pipeline_uses_approved_record_metadata(self):
+        registry = MappingRegistry()
+        registry.set_approved_record(
+            canonical_form="polypropylene",
+            geography_hint="",
+            unit_hint="",
+            dataset="approved:pp",
+            status="proxy",
+            confidence=0.88,
+            approval_type="human",
+            approved_by="qa",
+            reason="reviewed",
+        )
+        knowledge = dict(self.knowledge)
+        knowledge["synonym"] = dict(self.knowledge["synonym"])
+        knowledge["synonym"]["pp"] = "polypropylene"
+        pipeline = MappingPipeline(engine=MappingEngine(knowledge), ai_resolver=None, registry=registry)
+        result = pipeline.map_activity("PP")
+        self.assertEqual(result.selected_dataset, "approved:pp")
+        self.assertEqual(result.status, "proxy")
+        self.assertAlmostEqual(result.confidence, 0.88)
 
 
 if __name__ == "__main__":

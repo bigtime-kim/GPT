@@ -28,18 +28,26 @@ class MappingPipeline:
         geography_hint: str = "",
         unit_hint: str = "",
     ) -> MappingResult:
+        ctx = self.engine.analyze_activity(
+            raw_name=raw_name,
+            source_type=source_type,
+            geography_hint=geography_hint,
+            unit_hint=unit_hint,
+        )
+        deterministic = ctx.result
+
         if self.registry:
-            approved = self.registry.get_approved_mapping(raw_name, geography_hint, unit_hint)
+            approved = self.registry.get_approved_record(ctx.canonical_form, geography_hint, unit_hint)
             if approved:
                 return MappingResult(
-                    status="exact",
-                    selected_dataset=approved,
-                    confidence=0.99,
+                    status=approved.status,
+                    selected_dataset=approved.dataset,
+                    confidence=approved.confidence,
                     review_required=False,
-                    reason="Registry-approved mapping reused",
+                    reason=f"Registry-approved mapping reused ({approved.approval_type})",
                     trace_log=["registry_hit=true", "ai_assist_called=false"],
                 )
-            memo = self.registry.get_memo_mapping(raw_name, geography_hint, unit_hint)
+            memo = self.registry.get_memo_mapping(ctx.canonical_form, geography_hint, unit_hint)
             if memo:
                 return MappingResult(
                     status="exact",
@@ -50,18 +58,10 @@ class MappingPipeline:
                     trace_log=["memo_hit=true", "ai_assist_called=false"],
                 )
 
-        ctx = self.engine.analyze_activity(
-            raw_name=raw_name,
-            source_type=source_type,
-            geography_hint=geography_hint,
-            unit_hint=unit_hint,
-        )
-        deterministic = ctx.result
-
         has_candidate = deterministic.selected_dataset is not None
         if has_candidate and deterministic.confidence >= self.ai_threshold:
             if self.registry and deterministic.selected_dataset:
-                self.registry.set_memo_mapping(raw_name, geography_hint, unit_hint, deterministic.selected_dataset)
+                self.registry.set_memo_mapping(ctx.canonical_form, geography_hint, unit_hint, deterministic.selected_dataset)
             return deterministic
 
         if not self.ai_resolver:
@@ -84,12 +84,13 @@ class MappingPipeline:
         ai_confidence = float(ai_response.get("confidence", 0.0))
         ai_review_required = bool(ai_response.get("review_required", True))
 
-        use_ai = (
-            ai_selected is not None
-            and (
-                deterministic.selected_dataset is None
-                or (ai_confidence > deterministic.confidence and ai_review_required <= deterministic.review_required)
-            )
+        use_ai = self._can_replace_deterministic(
+            deterministic_selected=deterministic.selected_dataset,
+            deterministic_confidence=deterministic.confidence,
+            deterministic_review=deterministic.review_required,
+            ai_selected=ai_selected,
+            ai_confidence=ai_confidence,
+            ai_review=ai_review_required,
         )
 
         if not use_ai:
@@ -108,3 +109,18 @@ class MappingPipeline:
             reason=str(ai_response.get("reason", deterministic.reason)),
             trace_log=deterministic.trace_log + ["decision_gate=ai_needed", "ai_assist_called=true", f"ai_source={ai_source}"],
         )
+
+    @staticmethod
+    def _can_replace_deterministic(
+        deterministic_selected,
+        deterministic_confidence: float,
+        deterministic_review: bool,
+        ai_selected,
+        ai_confidence: float,
+        ai_review: bool,
+    ) -> bool:
+        if ai_selected is None:
+            return False
+        if deterministic_selected is None:
+            return True
+        return ai_confidence > deterministic_confidence and ai_review <= deterministic_review

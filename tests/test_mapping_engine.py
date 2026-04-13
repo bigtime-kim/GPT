@@ -107,11 +107,12 @@ class MappingEngineTest(unittest.TestCase):
         pipeline = MappingPipeline(engine=MappingEngine(self.knowledge), ai_resolver=None, registry=registry, ai_threshold=0.8)
         result = pipeline.map_activity("EN AW 6005A T6")
         self.assertEqual(result.selected_dataset, "ecoinvent:alu_extrusion_dataset")
-        self.assertIsNone(registry.get_approved_mapping("EN AW 6005A T6"))
-        self.assertEqual(
-            registry.get_memo_mapping("wrought aluminium extrusion family"),
-            "ecoinvent:alu_extrusion_dataset",
-        )
+        with self.assertRaises(NotImplementedError):
+            registry.get_approved_mapping("EN AW 6005A T6")
+        memo = registry.get_memo_record("wrought aluminium extrusion family")
+        self.assertIsNotNone(memo)
+        self.assertEqual(memo.dataset, "ecoinvent:alu_extrusion_dataset")
+        self.assertEqual(memo.status, "exact")
 
     def test_pipeline_ai_trace_contains_source(self):
         class DummyAI:
@@ -154,6 +155,25 @@ class MappingEngineTest(unittest.TestCase):
         self.assertEqual(result.selected_dataset, "approved:pp")
         self.assertEqual(result.status, "proxy")
         self.assertAlmostEqual(result.confidence, 0.88)
+        self.assertIn("approval_type=human", result.trace_log)
+
+    def test_should_not_call_ai_for_catalog_exact(self):
+        calls = {"count": 0}
+
+        class DummyAI:
+            def resolve(self, _payload):
+                calls["count"] += 1
+                return {"proxy_candidates": ["x"], "confidence": 1.0, "review_required": False, "source": "gemini_live"}
+
+        knowledge = dict(self.knowledge)
+        knowledge["db_catalog"] = dict(self.knowledge["db_catalog"])
+        knowledge["db_catalog"]["polypropylene"] = "catalog:pp"
+        knowledge["synonym"] = dict(self.knowledge["synonym"])
+        knowledge["synonym"]["pp"] = "polypropylene"
+        pipeline = MappingPipeline(engine=MappingEngine(knowledge), ai_resolver=DummyAI(), registry=MappingRegistry(), ai_threshold=0.99)
+        result = pipeline.map_activity("PP")
+        self.assertEqual(calls["count"], 0)
+        self.assertEqual(result.selected_dataset, "catalog:pp")
 
 
 if __name__ == "__main__":

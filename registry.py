@@ -15,6 +15,15 @@ class ApprovedRecord:
     reason: str = ""
 
 
+@dataclass
+class MemoRecord:
+    dataset: str
+    status: str
+    confidence: float
+    review_required: bool
+    reason: str = ""
+
+
 class MappingRegistry:
     """In-memory registry/cache.
 
@@ -25,7 +34,7 @@ class MappingRegistry:
 
     def __init__(self):
         self._approved: Dict[Tuple[str, str, str], ApprovedRecord] = {}
-        self._memo: Dict[Tuple[str, str, str], str] = {}
+        self._memo: Dict[Tuple[str, str, str], MemoRecord] = {}
         self._ai_cache: Dict[str, dict] = {}
 
     @staticmethod
@@ -64,24 +73,34 @@ class MappingRegistry:
             reason=reason,
         )
 
-    # Backward compatibility for tests/callers that still use raw-name key path.
+    # Deprecated legacy method for raw-name based access.
     def get_approved_mapping(self, raw_name: str, geography_hint: str = "", unit_hint: str = "") -> Optional[str]:
-        rec = self._approved.get(self.make_activity_key(raw_name, geography_hint, unit_hint))
-        return rec.dataset if rec else None
+        raise NotImplementedError("Use get_approved_record(canonical_form, geography_hint, unit_hint)")
 
     def set_approved_mapping(self, raw_name: str, geography_hint: str, unit_hint: str, dataset: str) -> None:
-        self._approved[self.make_activity_key(raw_name, geography_hint, unit_hint)] = ApprovedRecord(
-            dataset=dataset,
-            status="exact",
-            confidence=0.99,
-            approval_type="legacy",
-        )
+        raise NotImplementedError("Use set_approved_record with canonical_form + metadata")
 
-    def get_memo_mapping(self, canonical_form: str, geography_hint: str = "", unit_hint: str = "") -> Optional[str]:
+    def get_memo_record(self, canonical_form: str, geography_hint: str = "", unit_hint: str = "") -> Optional[MemoRecord]:
         return self._memo.get(self.make_canonical_key(canonical_form, geography_hint, unit_hint))
 
-    def set_memo_mapping(self, canonical_form: str, geography_hint: str, unit_hint: str, dataset: str) -> None:
-        self._memo[self.make_canonical_key(canonical_form, geography_hint, unit_hint)] = dataset
+    def set_memo_record(
+        self,
+        canonical_form: str,
+        geography_hint: str,
+        unit_hint: str,
+        dataset: str,
+        status: str,
+        confidence: float,
+        review_required: bool,
+        reason: str = "",
+    ) -> None:
+        self._memo[self.make_canonical_key(canonical_form, geography_hint, unit_hint)] = MemoRecord(
+            dataset=dataset,
+            status=status,
+            confidence=confidence,
+            review_required=review_required,
+            reason=reason,
+        )
 
     def get_ai_cache(self, payload_key: str) -> Optional[dict]:
         return self._ai_cache.get(payload_key)

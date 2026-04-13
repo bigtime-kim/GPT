@@ -45,26 +45,41 @@ class MappingPipeline:
                     confidence=approved.confidence,
                     review_required=False,
                     reason=f"Registry-approved mapping reused ({approved.approval_type})",
-                    trace_log=["registry_hit=true", "ai_assist_called=false"],
+                    trace_log=[
+                        "registry_hit=true",
+                        f"approval_type={approved.approval_type}",
+                        f"approved_by={approved.approved_by or 'unknown'}",
+                        f"approved_reason={approved.reason or 'n/a'}",
+                        "ai_assist_called=false",
+                    ],
                 )
-            memo = self.registry.get_memo_mapping(ctx.canonical_form, geography_hint, unit_hint)
+            memo = self.registry.get_memo_record(ctx.canonical_form, geography_hint, unit_hint)
             if memo:
                 return MappingResult(
-                    status="exact",
-                    selected_dataset=memo,
-                    confidence=0.95,
-                    review_required=False,
-                    reason="Memoized deterministic mapping reused",
+                    status=memo.status,
+                    selected_dataset=memo.dataset,
+                    confidence=memo.confidence,
+                    review_required=memo.review_required,
+                    reason=f"Memoized mapping reused: {memo.reason or 'deterministic result'}",
                     trace_log=["memo_hit=true", "ai_assist_called=false"],
                 )
 
         has_candidate = deterministic.selected_dataset is not None
         if has_candidate and deterministic.confidence >= self.ai_threshold:
             if self.registry and deterministic.selected_dataset:
-                self.registry.set_memo_mapping(ctx.canonical_form, geography_hint, unit_hint, deterministic.selected_dataset)
+                self.registry.set_memo_record(
+                    canonical_form=ctx.canonical_form,
+                    geography_hint=geography_hint,
+                    unit_hint=unit_hint,
+                    dataset=deterministic.selected_dataset,
+                    status=deterministic.status,
+                    confidence=deterministic.confidence,
+                    review_required=deterministic.review_required,
+                    reason=deterministic.reason,
+                )
             return deterministic
 
-        if not self.ai_resolver:
+        if not self.ai_resolver or not self._should_call_ai(ctx, deterministic):
             return deterministic
 
         payload = {
@@ -124,3 +139,12 @@ class MappingPipeline:
         if deterministic_selected is None:
             return True
         return ai_confidence > deterministic_confidence and ai_review <= deterministic_review
+
+    def _should_call_ai(self, ctx, deterministic: MappingResult) -> bool:
+        if ctx.name_type in {"energy", "wastewater"}:
+            return False
+        if ctx.candidate_source in {"catalog_exact", "ef_exact"}:
+            return False
+        if deterministic.selected_dataset is None:
+            return True
+        return deterministic.confidence < self.ai_threshold
